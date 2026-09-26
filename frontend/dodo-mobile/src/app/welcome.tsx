@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/useAuth';
 import { colors } from '@/theme';
 
-// The dodo mark (assets/images/dodo/mark.svg, a 124×140 drawing).
+// The dodo mark (assets/images/dodo/mark.svg, a 160×140 drawing).
 const mark = require('../../assets/images/dodo/mark.svg');
 
 // Sign up / log in, in the same look as the launch intro it follows.
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: 24 },
   center: { justifyContent: 'center', alignItems: 'center' },
   brand: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bird: { width: 104, height: 117, marginBottom: 22 },
+  bird: { width: 128, height: 112, marginBottom: 22 },
   wordmark: { color: colors.text, fontSize: 30, fontWeight: '600', letterSpacing: 6 },
   line: {
     width: 44,

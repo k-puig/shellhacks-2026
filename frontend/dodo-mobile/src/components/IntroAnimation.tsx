@@ -26,7 +26,7 @@ const LINE_MS = 620;
 const HOLD_UNTIL_MS = 1250;
 const FADE_OUT_MS = 320;
 
-// The dodo mark (assets/images/dodo/mark.svg, a 124×140 drawing).
+// The dodo mark (assets/images/dodo/mark.svg, a 160×140 drawing).
 const markArt = require('../../assets/images/dodo/mark.svg');
 
 function Letter({ char, progress, reduceMotion }: {
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bird: { width: 104, height: 117, marginBottom: 22 },
+  bird: { width: 128, height: 112, marginBottom: 22 },
   fill: { width: '100%', height: '100%' },
   word: { flexDirection: 'row' },
   wordmark: {
