@@ -43,8 +43,7 @@ existing status line, the way it shows voice errors today.
 ### `src/narration/elevenlabs.ts` (new): API client
 
 ```ts
-synthesize(paragraphText: string, signal?: AbortSignal):
-  Promise<{ fileUri: string; wordStarts: number[] }>
+synthesize(paragraphText: string): Promise<{ fileUri: string; wordStarts: number[] }>
 ```
 
 - `POST https://api.elevenlabs.io/v1/text-to-speech/{voiceId}/with-timestamps`
@@ -87,8 +86,9 @@ Kept separate so it can be unit-tested without the network or audio:
 - **Speed**: `player.setPlaybackRate(rate, 'high')` (keeps pitch natural). Same
   0.5–2.0 range and 0.1 steps as today.
 - **Stale work**: the existing `session` counter stays. Every play, pause and
-  seek bumps it; a synthesis that resolves for an old session is dropped, and
-  in-flight requests are aborted with an `AbortController`.
+  seek bumps it, and a synthesis that resolves for an old session is not
+  played. Requests are not cancelled: their audio is cached for later, which
+  costs at most one extra paragraph.
 - `voiceName` is always `ElevenLabs`.
 
 ### Audio mode (shared with the mic)
