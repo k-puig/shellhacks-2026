@@ -16,6 +16,8 @@ import { wordAt } from './wordTimings';
 const UPDATE_INTERVAL_MS = 100;
 // Narrator volume while DODO listens for a command.
 const DUCK_VOLUME = 0.2;
+// Pause between the end of DODO's answer and the book picking back up.
+const RESUME_AFTER_ANSWER_MS = 2000;
 
 const paragraphText = (p: Paragraph) => p.words.map((w) => w.text).join(' ');
 
@@ -43,6 +45,12 @@ export function useNarration(book: Book) {
   const asideSession = useRef(0);
   // Where the narrator picks back up when the answer ends.
   const resumeAfterAside = useRef<number | null>(null);
+  // The pending "pick the book back up" after an answer; any play/pause wins.
+  const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelResume = () => {
+    if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    resumeTimer.current = null;
+  };
 
   // Bumped on every play/pause so results for an abandoned request are ignored.
   const session = useRef(0);
@@ -147,6 +155,7 @@ export function useNarration(book: Book) {
   }, [player, paragraphs]);
 
   const play = (fromIdx = currentIdxRef.current) => {
+    cancelResume();
     if (!isElevenLabsConfigured()) {
       setError(MISSING_KEY_MESSAGE);
       return;
@@ -157,6 +166,7 @@ export function useNarration(book: Book) {
   };
 
   const pause = () => {
+    cancelResume();
     session.current++;
     player.pause();
     setPlaying(false);
@@ -178,8 +188,8 @@ export function useNarration(book: Book) {
     player.volume = 1;
   };
 
-  // Ends the answer: book back to full volume and, with `resume`, rewound to
-  // where the listener asked if it was playing.
+  // Ends the answer. With `resume`, and if the book was playing, it picks back
+  // up a moment later from where the listener asked, at full volume.
   const stopAside = (resume = true) => {
     asideSession.current++;
     aside.pause();
@@ -187,14 +197,23 @@ export function useNarration(book: Book) {
     unduck();
     const resumeIdx = resumeAfterAside.current;
     resumeAfterAside.current = null;
-    if (resume && resumeIdx !== null && playingRef.current) play(resumeIdx);
+    if (resume && resumeIdx !== null && playingRef.current) {
+      resumeTimer.current = setTimeout(() => {
+        resumeTimer.current = null;
+        if (playingRef.current) play(resumeIdx);
+      }, RESUME_AFTER_ANSWER_MS);
+    }
   };
 
-  // Speaks DODO's answer over the ducked narrator.
+  // Speaks DODO's answer. The book stops while DODO talks (it stays in
+  // "playing" mode, so it resumes afterwards).
   const speakAside = async (text: string, resumeFromIdx: number) => {
+    cancelResume();
     const mySession = ++asideSession.current;
     resumeAfterAside.current = resumeFromIdx;
-    duck();
+    // Also drops a paragraph the narrator was still loading.
+    session.current++;
+    player.pause();
     setSpeakingAside(true);
     try {
       const audio = await synthesize(text);

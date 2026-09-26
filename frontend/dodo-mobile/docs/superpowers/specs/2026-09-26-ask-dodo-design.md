@@ -23,9 +23,10 @@ Success means:
 
 - **Context: everything read so far.** Gemini gets the book from the start up to
   the current sentence, capped at the most recent ~400,000 characters.
-- **While DODO answers, the book keeps playing at 20% volume** (ducked). When
-  the answer ends, narration rewinds to the sentence that was playing when the
-  user asked and continues at full volume.
+- **While DODO answers, the book stops.** It stays at 20% while the user asks
+  and while DODO thinks, pauses when the answer starts, and 2 seconds after
+  the answer ends it continues from the sentence where the user asked, at full
+  volume. Pressing play/pause or asking again during those 2 seconds wins.
 - **Question detection: approach A.** Phrases that look like questions go
   straight to the answering call; anything else goes to the existing
   interpreter, which gains an `answer` action as a fallback.
@@ -38,10 +39,10 @@ Success means:
 2. User asks a question. It ends after 1.3 s of silence, or when the user taps
    the mic again.
 3. Status line shows "Thinking…". Gemini answers.
-4. Success buzz; DODO speaks the answer over the ducked book; the answer text
+4. Success buzz; the book pauses and DODO speaks the answer; the answer text
    also shows in the status line.
-5. When the answer ends (or is stopped), narration picks up where the user left
-   off: it jumps back to the start of the sentence that was playing when they
+5. Two seconds after the answer ends (or is stopped), narration picks up where
+   the user left off: it jumps back to the start of the sentence that was playing when they
    said "Hey DODO" (or tapped the mic) and continues at full volume, so nothing
    played under the answer is missed. If the book was paused when they asked,
    it stays paused.
