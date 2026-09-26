@@ -24,6 +24,10 @@ export class ElevenLabsError extends Error {}
 
 export function errorMessage(status: number, detailStatus?: string): string {
   if (detailStatus === 'quota_exceeded' || status === 429) return 'ElevenLabs: out of credits';
+  // Keys can be restricted per feature in the ElevenLabs dashboard.
+  if (detailStatus === 'missing_permissions') {
+    return 'ElevenLabs: key needs the Text to Speech permission';
+  }
   if (status === 401) return 'ElevenLabs: invalid API key';
   return `ElevenLabs: error ${status}`;
 }

@@ -13,6 +13,12 @@ describe('errorMessage', () => {
     expect(errorMessage(401, 'quota_exceeded')).toBe('ElevenLabs: out of credits');
   });
 
+  it('says which permission is missing when the key is restricted', () => {
+    expect(errorMessage(401, 'missing_permissions')).toBe(
+      'ElevenLabs: key needs the Text to Speech permission',
+    );
+  });
+
   it('reports rate limiting as out of credits', () => {
     expect(errorMessage(429)).toBe('ElevenLabs: out of credits');
   });
