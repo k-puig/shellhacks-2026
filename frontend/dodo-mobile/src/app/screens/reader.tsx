@@ -51,6 +51,8 @@ const DOCK_DROP = 40;
 // Scroll movement smaller than this doesn't change the controls' position.
 const SCROLL_JITTER = 8;
 const DOCK_SPRING = { damping: 22, stiffness: 220, reduceMotion: ReduceMotion.System };
+// Autoscroll glides for moves this many rows or fewer; farther jumps snap.
+const NEARBY_ROWS = 3;
 // Answer text stays in the status line this long.
 const ANSWER_DISPLAY_MS = 12_000;
 // With no touches for this long, only the play button stays on screen.
@@ -603,13 +605,19 @@ function Reader({ book }: { book: Book }) {
     [rows],
   );
 
-  // Keep the paragraph being read on screen, hands-free.
+  // Keep the paragraph being read on screen, hands-free: glide along with
+  // narration, but snap straight there for a jump (chapter, contents, seek),
+  // instead of animating through everything in between.
   const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
+  const lastScrollRow = useRef<number | null>(null);
+  const scrollAnimated = useRef(false);
   useEffect(() => {
     const index = rowOfParagraph.get(activeParagraph);
-    if (index !== undefined) {
-      scroll.current?.scrollToIndex({ index, viewPosition: 0.15, animated: true });
-    }
+    if (index === undefined) return;
+    const from = lastScrollRow.current;
+    scrollAnimated.current = from !== null && Math.abs(index - from) <= NEARBY_ROWS;
+    lastScrollRow.current = index;
+    scroll.current?.scrollToIndex({ index, viewPosition: 0.15, animated: scrollAnimated.current });
   }, [activeParagraph, rowOfParagraph]);
 
   // Each note underlines the sentence it's attached to.
@@ -764,7 +772,7 @@ function Reader({ book }: { book: Book }) {
                 scroll.current?.scrollToIndex({
                   index: info.index,
                   viewPosition: 0.15,
-                  animated: true,
+                  animated: scrollAnimated.current,
                 }),
               50,
             );
