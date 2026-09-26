@@ -1,49 +1,71 @@
-import * as Speech from 'expo-speech';
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  type AudioPlayer,
+} from 'expo-audio';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Book, Paragraph } from '@/data/mockBooks';
 
-// Best-sounding English voice installed on the device. Premium and Enhanced
-// voices are free downloads in Settings → Accessibility → Spoken Content → Voices.
-async function pickVoice(): Promise<Speech.Voice | undefined> {
-  const voices = await Speech.getAvailableVoicesAsync();
-  const score = (v: Speech.Voice) =>
-    (v.identifier.includes('.premium.') ? 4 : 0) +
-    (v.quality === Speech.VoiceQuality.Enhanced ? 2 : 0) +
-    (v.language === 'en-US' ? 1 : 0);
-  return voices
-    .filter((v) => v.language.startsWith('en'))
-    // Skip Apple's novelty ("Bells", "Bad News"…) and robotic Eloquence voices.
-    .filter((v) => !/speech\.synthesis|eloquence/.test(v.identifier))
-    .sort((a, b) => score(b) - score(a))[0];
+import {
+  ElevenLabsError,
+  isElevenLabsConfigured,
+  MISSING_KEY_MESSAGE,
+  synthesize,
+} from './elevenlabs';
+import { wordAt } from './wordTimings';
+
+// How often the player reports its position, which drives word highlighting.
+const UPDATE_INTERVAL_MS = 100;
+
+const paragraphText = (p: Paragraph) => p.words.map((w) => w.text).join(' ');
+
+// Resolves once the player's current source is ready to seek.
+function whenLoaded(player: AudioPlayer): Promise<void> {
+  if (player.isLoaded) return Promise.resolve();
+  return new Promise((resolve) => {
+    const sub = player.addListener('playbackStatusUpdate', (status) => {
+      if (!status.isLoaded) return;
+      sub.remove();
+      resolve();
+    });
+  });
 }
 
-// Temporary narrator using the device's text-to-speech. It speaks one paragraph
-// at a time and reports the global word idx being spoken, which is the same
-// contract the Kokoro audio + word timings will fulfil later.
+// Narrator using ElevenLabs. It plays one paragraph at a time and reports the
+// global word idx being spoken, derived from ElevenLabs' character timings.
 export function useNarration(book: Book) {
   const paragraphs = useMemo(() => book.chapters.flatMap((c) => c.paragraphs), [book]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [rate, setRate] = useState(1);
+  const [error, setError] = useState('');
 
-  // Bumped on every play/stop so callbacks from a cancelled utterance are ignored.
+  // keepAudioSessionActive: pausing must not deactivate the iOS audio
+  // session, or the always-on "Hey DODO" listener loses the mic.
+  const player = useAudioPlayer(null, {
+    updateInterval: UPDATE_INTERVAL_MS,
+    keepAudioSessionActive: true,
+  });
+  const status = useAudioPlayerStatus(player);
+
+  // Bumped on every play/pause so results for an abandoned request are ignored.
   const session = useRef(0);
   const currentIdxRef = useRef(0);
+  const playingRef = useRef(false);
   const rateRef = useRef(1);
-  const voiceRef = useRef<string | undefined>(undefined);
-  const [voiceName, setVoiceName] = useState('System default');
+  // The paragraph in the player and its word start times (seconds).
+  const loaded = useRef<{ paragraph: Paragraph; wordStarts: number[] } | null>(null);
 
   useEffect(() => {
-    pickVoice().then((voice) => {
-      if (!voice) return;
-      voiceRef.current = voice.identifier;
-      const tier = voice.identifier.includes('.premium.')
-        ? 'Premium'
-        : voice.quality === Speech.VoiceQuality.Enhanced
-          ? 'Enhanced'
-          : '';
-      setVoiceName(tier ? `${voice.name} (${tier})` : voice.name);
+    // Match the wake-word listener's session (playAndRecord, mixWithOthers,
+    // speaker) so neither side reconfigures iOS audio when it starts or stops.
+    setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+      shouldRouteThroughEarpiece: false,
     });
   }, []);
 
@@ -52,58 +74,89 @@ export function useNarration(book: Book) {
     setCurrentIdx(idx);
   };
 
+  const setPlaying = (value: boolean) => {
+    playingRef.current = value;
+    setIsPlaying(value);
+  };
+
   const findParagraph = (idx: number): Paragraph | undefined =>
     paragraphs.find((p) => p.words[p.words.length - 1].idx >= idx);
 
-  const speakFrom = (idx: number) => {
+  const nextParagraph = (paragraph: Paragraph): Paragraph | undefined =>
+    paragraphs[paragraphs.indexOf(paragraph) + 1];
+
+  const speakFrom = async (idx: number) => {
     const paragraph = findParagraph(idx);
     if (!paragraph) {
-      setIsPlaying(false);
+      setPlaying(false);
       return;
     }
-    const words = paragraph.words.filter((w) => w.idx >= idx);
-    const offsets: number[] = [];
-    let text = '';
-    for (const w of words) {
-      offsets.push(text.length);
-      text += w.text + ' ';
-    }
-
     const mySession = ++session.current;
-    moveTo(words[0].idx);
-    Speech.speak(text, {
-      rate: rateRef.current,
-      voice: voiceRef.current,
-      // iOS: share the app's playAndRecord session set up by the voice listener.
-      // A separate synthesizer session activates per utterance, which fires
-      // route changes that make the listener tear down and reconfigure the
-      // session, cutting the narrator out and flipping it to call audio.
-      useApplicationAudioSession: true,
-      onBoundary: ({ charIndex }: { charIndex: number }) => {
+    const offset = Math.max(0, paragraph.words.findIndex((w) => w.idx >= idx));
+    moveTo(paragraph.words[offset].idx);
+
+    try {
+      // Same paragraph already in the player (resume, or a tap inside it):
+      // just seek, no new request.
+      let current = loaded.current;
+      if (current?.paragraph !== paragraph) {
+        const audio = await synthesize(paragraphText(paragraph));
         if (session.current !== mySession) return;
-        let i = 0;
-        while (i + 1 < offsets.length && offsets[i + 1] <= charIndex) i++;
-        moveTo(words[i].idx);
-      },
-      onDone: () => {
+        player.replace({ uri: audio.fileUri });
+        current = { paragraph, wordStarts: audio.wordStarts };
+        loaded.current = current;
+        await whenLoaded(player);
         if (session.current !== mySession) return;
-        const next = paragraphs[paragraphs.indexOf(paragraph) + 1];
-        if (next) speakFrom(next.words[0].idx);
-        else setIsPlaying(false);
-      },
-    });
+      }
+      await player.seekTo(current.wordStarts[offset]);
+      if (session.current !== mySession) return;
+      player.setPlaybackRate(rateRef.current, 'high');
+      player.play();
+      setError('');
+
+      // Fetch the next paragraph now so it starts without a gap. A failure
+      // here is ignored; it is fetched again when it is reached.
+      const next = nextParagraph(paragraph);
+      if (next) synthesize(paragraphText(next)).catch(() => {});
+    } catch (e) {
+      if (session.current !== mySession) return;
+      setPlaying(false);
+      setError(e instanceof ElevenLabsError ? e.message : "ElevenLabs: couldn't connect");
+    }
   };
 
+  // Highlight the word at the current playback position.
+  useEffect(() => {
+    const current = loaded.current;
+    if (!current || !playingRef.current) return;
+    const word = current.paragraph.words[wordAt(current.wordStarts, status.currentTime)];
+    if (word && word.idx !== currentIdxRef.current) moveTo(word.idx);
+  }, [status.currentTime]);
+
+  // Paragraph finished: continue with the next one, or stop at the end.
+  useEffect(() => {
+    if (!status.didJustFinish || !playingRef.current || !loaded.current) return;
+    const next = nextParagraph(loaded.current.paragraph);
+    if (next) speakFrom(next.words[0].idx);
+    else setPlaying(false);
+    // speakFrom and nextParagraph only read refs and the paragraph list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.didJustFinish]);
+
   const play = (fromIdx = currentIdxRef.current) => {
-    Speech.stop();
-    setIsPlaying(true);
+    if (!isElevenLabsConfigured()) {
+      setError(MISSING_KEY_MESSAGE);
+      return;
+    }
+    player.pause();
+    setPlaying(true);
     speakFrom(fromIdx);
   };
 
   const pause = () => {
     session.current++;
-    Speech.stop();
-    setIsPlaying(false);
+    player.pause();
+    setPlaying(false);
   };
 
   const seek = (idx: number, keepPlaying: boolean) => {
@@ -115,12 +168,27 @@ export function useNarration(book: Book) {
     const next = Math.min(2, Math.max(0.5, Math.round((rateRef.current + delta) * 10) / 10));
     rateRef.current = next;
     setRate(next);
+    player.setPlaybackRate(next, 'high');
   };
 
-  useEffect(() => () => {
-    session.current++;
-    Speech.stop();
-  }, []);
+  useEffect(
+    () => () => {
+      session.current++;
+    },
+    [],
+  );
 
-  return { paragraphs, currentIdx, currentIdxRef, isPlaying, rate, voiceName, play, pause, seek, changeRate };
+  return {
+    paragraphs,
+    currentIdx,
+    currentIdxRef,
+    isPlaying,
+    rate,
+    voiceName: 'ElevenLabs',
+    error,
+    play,
+    pause,
+    seek,
+    changeRate,
+  };
 }

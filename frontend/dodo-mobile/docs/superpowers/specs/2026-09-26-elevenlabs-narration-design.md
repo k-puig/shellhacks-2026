@@ -103,6 +103,10 @@ setAudioModeAsync({
 });
 ```
 
+The player is created with `keepAudioSessionActive: true`. Without it,
+`expo-audio` deactivates the iOS audio session on pause, which stops the
+wake-word recognizer every time "Hey DODO" pauses the narrator.
+
 This matches what the wake-word listener sets (`playAndRecord`,
 `mixWithOthers`, speaker output), so neither the mic nor the player flips the
 iOS audio session when it starts or stops. Flipping the session was the cause

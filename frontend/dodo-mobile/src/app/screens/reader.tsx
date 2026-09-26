@@ -366,6 +366,9 @@ function Reader({ book }: { book: Book }) {
     error: `Voice unavailable (${voice.errorDetail}), tap to retry`,
   }[voice.status];
 
+  // Command feedback first, then narration problems, then the mic's state.
+  const message = feedback || narration.error;
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <Text style={styles.bookTitle} numberOfLines={1}>
@@ -440,7 +443,7 @@ function Reader({ book }: { book: Book }) {
         style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }]}
         pointerEvents="box-none">
         {/* Only shown when there's something to say; idle listening stays silent. */}
-        {(feedback || voice.status !== 'listening') && (
+        {(message || voice.status !== 'listening') && (
           <Pressable
             onPress={voice.status === 'error' ? voice.retry : undefined}
             style={styles.status}>
@@ -448,7 +451,7 @@ function Reader({ book }: { book: Book }) {
             <Text
               style={[styles.statusText, voice.status === 'awake' && styles.statusTextAwake]}
               numberOfLines={2}>
-              {feedback || statusLabel}
+              {message || statusLabel}
             </Text>
           </Pressable>
         )}
