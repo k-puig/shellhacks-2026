@@ -8,8 +8,9 @@ import { wordStartTimes } from './wordTimings';
 // before shipping.
 
 const API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
-// Defaults to "Rachel", one of ElevenLabs' built-in voices.
-const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? '21m00Tcm4TlvDQ8ikWAM';
+// Defaults to "George", one of ElevenLabs' current default voices. (The older
+// built-in voices, like "Rachel", don't exist on newer accounts.)
+const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb';
 const MODEL = 'eleven_flash_v2_5';
 const TIMEOUT_MS = 15_000;
 
@@ -29,6 +30,9 @@ export function errorMessage(status: number, detailStatus?: string): string {
     return 'ElevenLabs: key needs the Text to Speech permission';
   }
   if (status === 401) return 'ElevenLabs: invalid API key';
+  if (detailStatus === 'voice_not_found') {
+    return 'ElevenLabs: voice not found, check EXPO_PUBLIC_ELEVENLABS_VOICE_ID';
+  }
   return `ElevenLabs: error ${status}`;
 }
 

@@ -19,6 +19,12 @@ describe('errorMessage', () => {
     );
   });
 
+  it('points at the voice setting when the voice does not exist', () => {
+    expect(errorMessage(404, 'voice_not_found')).toBe(
+      'ElevenLabs: voice not found, check EXPO_PUBLIC_ELEVENLABS_VOICE_ID',
+    );
+  });
+
   it('reports rate limiting as out of credits', () => {
     expect(errorMessage(429)).toBe('ElevenLabs: out of credits');
   });

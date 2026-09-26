@@ -16,7 +16,7 @@ All paths below are relative to `frontend/dodo-mobile/`. Work on branch `feature
 
 1. Create an account at https://elevenlabs.io.
 2. Profile → **API Keys** → create a key. It needs the **Text to Speech** permission.
-3. Optional: in **Voices**, pick a voice, copy its **Voice ID**. Without one, the app uses the default voice `21m00Tcm4TlvDQ8ikWAM` ("Rachel").
+3. Optional: in **Voices**, pick a voice, copy its **Voice ID**. Without one, the app uses the default voice `JBFqnCBsd6RMkjVDRZzb` ("George").
 4. Add to `.env.local` (git-ignored, never commit it):
 
 ```
@@ -31,7 +31,7 @@ The free tier includes a limited number of characters per month; a paragraph cos
 
 - Expo SDK 57. Install every package with `npx expo install <pkg>` (never `npm install`).
 - Model `eleven_flash_v2_5`; endpoint `POST https://api.elevenlabs.io/v1/text-to-speech/{voiceId}/with-timestamps`; auth header `xi-api-key`.
-- Key from `EXPO_PUBLIC_ELEVENLABS_API_KEY`; voice from `EXPO_PUBLIC_ELEVENLABS_VOICE_ID`, default `21m00Tcm4TlvDQ8ikWAM`.
+- Key from `EXPO_PUBLIC_ELEVENLABS_API_KEY`; voice from `EXPO_PUBLIC_ELEVENLABS_VOICE_ID`, default `JBFqnCBsd6RMkjVDRZzb`.
 - No fallback to `expo-speech`; remove the package.
 - `useNarration` return value stays `paragraphs, currentIdx, currentIdxRef, isPlaying, rate, voiceName, play, pause, seek, changeRate`, plus `error: string`.
 - Speed range 0.5–2.0 in 0.1 steps (unchanged).
@@ -274,8 +274,8 @@ import { wordStartTimes } from './wordTimings';
 // before shipping.
 
 const API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
-// Defaults to "Rachel", one of ElevenLabs' built-in voices.
-const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? '21m00Tcm4TlvDQ8ikWAM';
+// Defaults to "George", one of ElevenLabs' current default voices.
+const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb';
 const MODEL = 'eleven_flash_v2_5';
 const TIMEOUT_MS = 15_000;
 
