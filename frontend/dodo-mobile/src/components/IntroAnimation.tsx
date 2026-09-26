@@ -13,6 +13,8 @@ import Animated, {
 
 import { colors } from '@/theme';
 
+// Artwork is drawn on a 220×200 grid (see assets/images/dodo); K scales it on screen.
+const K = 0.6;
 const WORD = 'dodo';
 
 // Strong ease-out: quick to arrive, gentle to settle.
@@ -26,8 +28,8 @@ const LINE_MS = 620;
 const HOLD_UNTIL_MS = 1250;
 const FADE_OUT_MS = 320;
 
-// The dodo mark (assets/images/dodo/mark.svg, a 160×140 drawing).
-const markArt = require('../../assets/images/dodo/mark.svg');
+const body = require('../../assets/images/dodo/body.svg');
+const leg = require('../../assets/images/dodo/leg.svg');
 
 function Letter({ char, progress, reduceMotion }: {
   char: string;
@@ -93,7 +95,9 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
     <Animated.View style={[styles.overlay, overlayStyle]}>
       <Pressable style={styles.center} onPress={finish} accessibilityLabel="Skip intro">
         <Animated.View style={[styles.bird, markStyle]}>
-          <Image source={markArt} style={styles.fill} contentFit="contain" />
+          <Image source={leg} style={[styles.leg, { left: 82 * K }]} />
+          <Image source={leg} style={[styles.leg, { left: 110 * K }]} />
+          <Image source={body} style={styles.body} />
         </Animated.View>
         <View style={styles.word} accessible accessibilityLabel={WORD}>
           {WORD.split('').map((char, i) => (
@@ -117,8 +121,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bird: { width: 128, height: 112, marginBottom: 22 },
-  fill: { width: '100%', height: '100%' },
+  bird: { width: 220 * K, height: 200 * K, marginBottom: 20 },
+  body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
+  leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K },
   word: { flexDirection: 'row' },
   wordmark: {
     color: colors.text,

@@ -7,8 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/useAuth';
 import { colors } from '@/theme';
 
-// The dodo mark (assets/images/dodo/mark.svg, a 160×140 drawing).
-const mark = require('../../assets/images/dodo/mark.svg');
+// Artwork is drawn on a 220×200 grid (see assets/images/dodo); K scales it on screen.
+const K = 0.6;
+const body = require('../../assets/images/dodo/body.svg');
+const leg = require('../../assets/images/dodo/leg.svg');
 
 // Sign up / log in, in the same look as the launch intro it follows.
 export default function WelcomeScreen() {
@@ -31,7 +33,11 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.brand}>
-        <Image source={mark} style={styles.bird} contentFit="contain" />
+        <View style={styles.bird}>
+          <Image source={leg} style={[styles.leg, { left: 82 * K }]} />
+          <Image source={leg} style={[styles.leg, { left: 110 * K }]} />
+          <Image source={body} style={styles.body} />
+        </View>
         <Text style={styles.wordmark}>dodo</Text>
         <View style={styles.line} />
         <Text style={styles.tagline}>Hands-free, voice-guided reading</Text>
@@ -59,7 +65,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: 24 },
   center: { justifyContent: 'center', alignItems: 'center' },
   brand: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bird: { width: 128, height: 112, marginBottom: 22 },
+  bird: { width: 220 * K, height: 200 * K, marginBottom: 20 },
+  body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
+  leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K },
   wordmark: { color: colors.text, fontSize: 30, fontWeight: '600', letterSpacing: 6 },
   line: {
     width: 44,
