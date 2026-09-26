@@ -24,7 +24,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 import { ActionButton, type ActionState } from '@/components/ActionButton';
+import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
+import { nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
 import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
@@ -662,6 +664,37 @@ function Reader({ book }: { book: Book }) {
       />
     );
 
+  const [showContents, setShowContents] = useState(false);
+
+  // Pick up where the listener left off (paused), once saved positions load.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !library.positionsLoaded) return;
+    restored.current = true;
+    const saved = library.positions[book.id];
+    if (saved) narration.seek(saved.lastIdx, false);
+    // Runs once per book, when positions become available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library.positionsLoaded]);
+
+  // Save the spot as each paragraph starts and whenever narration pauses.
+  useEffect(() => {
+    if (restored.current) library.setPosition(book.id, narration.currentIdxRef.current);
+    // library.setPosition only updates state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeParagraph, narration.isPlaying]);
+
+  const onPreviousChapter = () =>
+    narration.seek(
+      previousChapterTarget(book, narration.currentIdxRef.current),
+      narration.isPlaying,
+    );
+  const onNextChapter = () => {
+    const next = nextChapterStart(book, narration.currentIdxRef.current);
+    if (next === null) say('This is the last chapter');
+    else narration.seek(next, narration.isPlaying);
+  };
+
   const statusLabel = {
     starting: 'Starting microphone…',
     listening: 'Say “Hey DODO”',
@@ -690,9 +723,21 @@ function Reader({ book }: { book: Book }) {
   };
   return (
     <SafeAreaView style={styles.screen} edges={['top']} onTouchStart={onTouch}>
-      <Text style={styles.bookTitle} numberOfLines={1}>
-        {book.title}
-      </Text>
+      {/* Tap the title for the table of contents. */}
+      <Pressable
+        style={styles.titleButton}
+        onPress={() => setShowContents(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${book.title}, contents`}>
+        <Text style={styles.bookTitle} numberOfLines={1}>
+          {book.title}
+        </Text>
+        <SymbolView
+          name={{ ios: 'list.bullet', android: 'list', web: 'list' }}
+          tintColor={colors.textSecondary}
+          size={15}
+        />
+      </Pressable>
 
       {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
@@ -749,27 +794,8 @@ function Reader({ book }: { book: Book }) {
           </Pressable>
         )}
 
+        {/* Tools fade when idle; previous / play / next always stay. */}
         <View style={styles.controls}>
-          <Pressable
-            style={styles.playButton}
-            accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
-            onPress={() => {
-              // During an answer: stop it, then do what the button shows.
-              if (narration.isSpeakingAside) narration.stopAside(false);
-              if (narration.isPlaying) narration.pause();
-              else narration.play();
-            }}>
-            <SymbolView
-              name={
-                narration.isPlaying
-                  ? { ios: 'pause.fill', android: 'pause', web: 'pause' }
-                  : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }
-              }
-              tintColor={colors.background}
-              size={26}
-            />
-          </Pressable>
-
           <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
@@ -790,6 +816,52 @@ function Reader({ book }: { book: Book }) {
             />
           </IdleFade>
 
+          <Pressable
+            style={styles.chapterButton}
+            hitSlop={6}
+            onPress={onPreviousChapter}
+            accessibilityRole="button"
+            accessibilityLabel="Previous chapter">
+            <SymbolView
+              name={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }}
+              tintColor={colors.text}
+              size={22}
+            />
+          </Pressable>
+
+          <Pressable
+            style={styles.playButton}
+            accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
+            onPress={() => {
+              // During an answer: stop it, then do what the button shows.
+              if (narration.isSpeakingAside) narration.stopAside(false);
+              if (narration.isPlaying) narration.pause();
+              else narration.play();
+            }}>
+            <SymbolView
+              name={
+                narration.isPlaying
+                  ? { ios: 'pause.fill', android: 'pause', web: 'pause' }
+                  : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }
+              }
+              tintColor={colors.background}
+              size={26}
+            />
+          </Pressable>
+
+          <Pressable
+            style={styles.chapterButton}
+            hitSlop={6}
+            onPress={onNextChapter}
+            accessibilityRole="button"
+            accessibilityLabel="Next chapter">
+            <SymbolView
+              name={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }}
+              tintColor={colors.text}
+              size={22}
+            />
+          </Pressable>
+
           <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' }}
@@ -800,6 +872,17 @@ function Reader({ book }: { book: Book }) {
           </IdleFade>
         </View>
       </Animated.View>
+
+      <ContentsSheet
+        visible={showContents}
+        book={book}
+        position={library.positions[book.id]}
+        onClose={() => setShowContents(false)}
+        onSelect={(idx) => {
+          setShowContents(false);
+          narration.seek(idx, narration.isPlaying);
+        }}
+      />
 
       <Modal
         visible={noteAnchor !== null}
@@ -910,7 +993,15 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.textSecondary },
   dotAwake: { backgroundColor: colors.accent },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
-  sideButton: { width: 88, alignItems: 'center' },
+  sideButton: { width: 56, alignItems: 'center' },
+  chapterButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  titleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 40,
+  },
   playButton: {
     width: 60,
     height: 60,

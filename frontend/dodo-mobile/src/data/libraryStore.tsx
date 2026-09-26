@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { mockBooks, type AskedQuestion, type Highlight, type Note } from './mockBooks';
+import { loadPositions, savePositions } from './progressFile';
+import { withPosition, type Positions } from './readingProgress';
 
 type Saved<T> = T & { bookId: string };
 
@@ -17,6 +19,11 @@ type LibraryState = {
   askedQuestions: Saved<AskedQuestion>[];
   addAskedQuestion: (q: Omit<Saved<AskedQuestion>, 'id'>) => void;
   removeAskedQuestion: (id: string) => void;
+  // Where the listener is in each book, and the furthest point reached.
+  positions: Positions;
+  // False until saved positions have been read at launch.
+  positionsLoaded: boolean;
+  setPosition: (bookId: string, idx: number) => void;
 };
 
 const LibraryContext = createContext<LibraryState | null>(null);
@@ -30,6 +37,18 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   const [highlights, setHighlights] = useState<Saved<Highlight>[]>([]);
   const [notes, setNotes] = useState<Saved<Note>[]>([]);
   const [askedQuestions, setAskedQuestions] = useState<Saved<AskedQuestion>[]>([]);
+  const [positions, setPositions] = useState<Positions>({});
+  const [positionsLoaded, setPositionsLoaded] = useState(false);
+
+  useEffect(() => {
+    loadPositions().then((saved) => {
+      setPositions(saved);
+      setPositionsLoaded(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (positionsLoaded) savePositions(positions);
+  }, [positions, positionsLoaded]);
 
   return (
     <LibraryContext.Provider
@@ -47,6 +66,10 @@ export function LibraryProvider({ children }: PropsWithChildren) {
         askedQuestions,
         addAskedQuestion: (q) => setAskedQuestions((all) => [...all, { ...q, id: newId('q') }]),
         removeAskedQuestion: (id) => setAskedQuestions((all) => all.filter((q) => q.id !== id)),
+        positions,
+        positionsLoaded,
+        setPosition: (bookId, idx) =>
+          setPositions((all) => ({ ...all, [bookId]: withPosition(all[bookId], idx) })),
       }}>
       {children}
     </LibraryContext.Provider>
