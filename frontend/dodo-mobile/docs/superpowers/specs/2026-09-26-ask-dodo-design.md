@@ -23,8 +23,9 @@ Success means:
 
 - **Context: everything read so far.** Gemini gets the book from the start up to
   the current sentence, capped at the most recent ~400,000 characters.
-- **While DODO answers, the book keeps playing at 20% volume** (ducked), and
-  returns to full volume when the answer ends.
+- **While DODO answers, the book keeps playing at 20% volume** (ducked). When
+  the answer ends, narration rewinds to the sentence that was playing when the
+  user asked and continues at full volume.
 - **Question detection: approach A.** Phrases that look like questions go
   straight to the answering call; anything else goes to the existing
   interpreter, which gains an `answer` action as a fallback.
@@ -39,7 +40,11 @@ Success means:
 3. Status line shows "Thinking…". Gemini answers.
 4. Success buzz; DODO speaks the answer over the ducked book; the answer text
    also shows in the status line.
-5. When the answer ends, the book returns to full volume.
+5. When the answer ends (or is stopped), narration picks up where the user left
+   off: it jumps back to the start of the sentence that was playing when they
+   said "Hey DODO" (or tapped the mic) and continues at full volume, so nothing
+   played under the answer is missed. If the book was paused when they asked,
+   it stays paused.
 6. The Q&A appears in Notes → Ask DODO, under the book, newest first.
 
 ## Components
@@ -86,9 +91,11 @@ answerQuestion(question: string, book: Book, currentIdx: number):
 
 ### `src/narration/useNarration.ts`: speaking an answer
 
-- `speakAside(text: string): Promise<void>`: fetches audio for `text` from
-  ElevenLabs (no timestamps needed) on a second `useAudioPlayer`, ducks the
-  narrator, plays, and unducks when it finishes or is stopped.
+- `speakAside(text: string, resumeFromIdx: number): Promise<void>`: fetches
+  audio for `text` from ElevenLabs (no timestamps needed) on a second
+  `useAudioPlayer`, ducks the narrator, and plays. When it finishes or is
+  stopped, it unducks and, if the narrator was playing, seeks it to
+  `resumeFromIdx` so narration picks up where the user left off.
 - `stopAside()`: stops the answer and unducks.
 - `isSpeakingAside: boolean` for the UI.
 - The second player uses the same `keepAudioSessionActive: true`.
@@ -116,9 +123,11 @@ answerQuestion(question: string, book: Book, currentIdx: number):
 
 ### `src/app/screens/reader.tsx`: wiring
 
+- On the wake word (or mic tap), remember the start of the sentence being read
+  (`resumeFromIdx`, via `sentenceAround`).
 - `question` commands (and interpreter `answer` results) → "Thinking…" →
-  `answerQuestion` → save → success haptic → `speakAside(answer)` → status line
-  shows the answer.
+  `answerQuestion` → save → success haptic → `speakAside(answer, resumeFromIdx)`
+  → status line shows the answer.
 - **Mic button, three states:**
   - Idle: tap = same as "Hey DODO" (existing).
   - Listening (after the wake word or a tap): tap ends the user's turn. If
@@ -158,6 +167,8 @@ answerQuestion(question: string, book: Book, currentIdx: number):
 - `groupQuestionsByBook`: ordering, newest first within a book, chapter and
   passage.
 - `endTurn` decision (submit vs cancel) as a pure helper.
+- The resume point: the start of the sentence containing the word being read
+  at the wake word, including the first sentence of a paragraph.
 
 **On the phone:**
 
@@ -166,6 +177,8 @@ answerQuestion(question: string, book: Book, currentIdx: number):
 2. Ask about something from an earlier chapter: the answer connects back to it.
 3. Ask how the story ends: no spoilers.
 4. Say "Hey DODO" or tap the mic during an answer: it stops.
+4a. When an answer ends, narration rewinds to the sentence you were at when you
+    asked and continues at full volume.
 5. Tap the mic, ask a question, tap again: it's submitted right away.
 6. Tap the mic and tap again without speaking: listening cancels, book volume
    returns.
