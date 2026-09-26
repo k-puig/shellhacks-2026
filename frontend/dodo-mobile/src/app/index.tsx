@@ -1,24 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
 
 export default function Index() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>dodo</Text>
-    </View>
-  );
+  return <Redirect href="/screens/home" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 48,
-    fontWeight: '600',
-    letterSpacing: -1,
-    color: '#111',
-  },
-});

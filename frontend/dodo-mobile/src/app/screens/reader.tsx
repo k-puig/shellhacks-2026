@@ -1,0 +1,580 @@
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollViewMarker } from 'react-native-screens/experimental';
+
+import { ActionButton, type ActionState } from '@/components/ActionButton';
+import { useLibrary } from '@/data/libraryStore';
+import { getBook, type Book, type Paragraph } from '@/data/mockBooks';
+import { useNarration } from '@/narration/useNarration';
+import { colors } from '@/theme';
+import { parseCommand, type Command } from '@/voice/parseCommand';
+import { useWakeWord } from '@/voice/useWakeWord';
+
+// Height of the floating iOS tab bar above the home-indicator inset.
+const TAB_BAR_HEIGHT = 56;
+// Room the floating controls take, so the last paragraph can scroll above them.
+const DOCK_HEIGHT = 110;
+
+// Book text uses a serif; Georgia ships with iOS, "serif" maps to Noto Serif on Android.
+const READING_FONT = Platform.select({ ios: 'Georgia', default: 'serif' });
+
+const endsSentence = (word: string) => /[.!?]["')\]]*$/.test(word);
+
+// The sentence containing a word (used for long-press).
+function sentenceContaining(paragraph: Paragraph, idx: number) {
+  const words = paragraph.words;
+  const at = words.findIndex((w) => w.idx === idx);
+  let start = at;
+  while (start > 0 && !endsSentence(words[start - 1].text)) start--;
+  let end = at;
+  while (end < words.length - 1 && !endsSentence(words[end].text)) end++;
+  return { startIdx: words[start].idx, endIdx: words[end].idx };
+}
+
+// The sentence the listener most likely means by "highlight that": the current
+// one, or the previous one if narration has only just started a new sentence.
+function sentenceAround(paragraph: Paragraph, idx: number) {
+  const current = sentenceContaining(paragraph, idx);
+  const wordsIn = idx - current.startIdx;
+  if (wordsIn < 3 && current.startIdx > paragraph.words[0].idx) {
+    return sentenceContaining(paragraph, current.startIdx - 1);
+  }
+  return current;
+}
+
+export default function ReaderScreen() {
+  const { currentBookId } = useLibrary();
+  // Remount per book so narration and voice state start fresh.
+  return <Reader key={currentBookId} book={getBook(currentBookId)} />;
+}
+
+function Reader({ book }: { book: Book }) {
+  const narration = useNarration(book);
+  const library = useLibrary();
+  const insets = useSafeAreaInsets();
+  const highlights = library.highlights.filter((h) => h.bookId === book.id);
+  const notes = library.notes.filter((n) => n.bookId === book.id);
+
+  const [feedback, setFeedback] = useState('');
+  // Word the note being typed is attached to; null when the composer is closed.
+  const [noteAnchor, setNoteAnchor] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  // A highlight or note the user tapped in the text, so a button can delete it.
+  const [selected, setSelected] = useState<{ type: 'highlight' | 'note'; id: string } | null>(null);
+  // Set after the first tap on X; the second tap (trash) deletes this item.
+  const [confirming, setConfirming] = useState<{ type: 'highlight' | 'note'; id: string } | null>(
+    null,
+  );
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const wasPlaying = useRef(false);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const say = (message: string) => {
+    setFeedback(message);
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(''), 2500);
+  };
+
+  const paragraphOf = (idx: number) =>
+    narration.paragraphs.find((p) => p.words[p.words.length - 1].idx >= idx)!;
+
+  const chapterStarts = book.chapters.map((c) => c.paragraphs[0].words[0].idx);
+
+  // Shared by voice, the highlight button, and long-press.
+  const addHighlight = (range: { startIdx: number; endIdx: number }) => {
+    if (highlights.some((h) => h.startIdx === range.startIdx && h.endIdx === range.endIdx)) {
+      say('Already highlighted');
+      return;
+    }
+    library.addHighlight({ bookId: book.id, ...range, color: colors.accent });
+    say('Highlighted');
+  };
+
+  const addNote = (wordIdx: number, content: string) => {
+    library.addNote({ bookId: book.id, wordIdx, content });
+    say(`Noted: “${content}”`);
+  };
+
+  const words = narration.paragraphs.flatMap((p) => p.words);
+  const contextBefore = (idx: number) =>
+    words
+      .filter((w) => w.idx > idx - 6 && w.idx <= idx)
+      .map((w) => w.text)
+      .join(' ');
+
+  // Narration keeps playing while the note is typed; it anchors to the word
+  // being read when the button was tapped.
+  const openNoteComposer = () => {
+    setNoteDraft('');
+    setNoteAnchor(narration.currentIdxRef.current);
+  };
+
+  const saveNote = () => {
+    const content = noteDraft.trim();
+    if (noteAnchor !== null && content) addNote(noteAnchor, content);
+    setNoteAnchor(null);
+  };
+
+  // What each button would delete right now. The highlight button also targets
+  // the sentence it would highlight, if that sentence is already highlighted.
+  const autoHighlight = highlights.find((h) => {
+    const range = sentenceAround(paragraphOf(narration.currentIdx), narration.currentIdx);
+    return h.startIdx === range.startIdx && h.endIdx === range.endIdx;
+  });
+  const highlightTarget = selected?.type === 'highlight' ? selected.id : autoHighlight?.id;
+  const noteTarget = selected?.type === 'note' ? selected.id : undefined;
+
+  // Trash only shows while the armed item is still this button's target; if the
+  // target moves on (narration leaves an auto-targeted sentence), it falls back.
+  const isArmed = (type: 'highlight' | 'note', target: string | undefined) =>
+    target !== undefined && confirming?.type === type && confirming.id === target;
+
+  const buttonState = (type: 'highlight' | 'note', target: string | undefined): ActionState =>
+    isArmed(type, target) ? 'confirm' : target ? 'remove' : 'idle';
+
+  const clearConfirm = () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirming(null);
+  };
+
+  // Two-step delete: first tap arms (X → trash), second tap deletes.
+  // Unconfirmed deletes fall back to X after a few seconds.
+  const pressDelete = (type: 'highlight' | 'note', target: string) => {
+    if (isArmed(type, target)) {
+      if (type === 'highlight') library.removeHighlight(target);
+      else library.removeNote(target);
+      clearConfirm();
+      setSelected(null);
+      say(type === 'highlight' ? 'Highlight removed' : 'Note removed');
+      return;
+    }
+    clearConfirm();
+    setConfirming({ type, id: target });
+    confirmTimer.current = setTimeout(() => setConfirming(null), 3000);
+  };
+
+  const onHighlightButton = () => {
+    if (highlightTarget) pressDelete('highlight', highlightTarget);
+    else run({ type: 'highlight' });
+  };
+
+  const onNoteButton = () => {
+    if (noteTarget) pressDelete('note', noteTarget);
+    else openNoteComposer();
+  };
+
+  // Tapping a highlighted word selects that highlight, tapping underlined
+  // (noted) text selects that note; tap again to deselect. Any other word
+  // jumps narration there.
+  const onWordPress = (idx: number) => {
+    const hit = highlights.find((h) => idx >= h.startIdx && idx <= h.endIdx);
+    clearConfirm();
+    if (hit) {
+      setSelected(selected?.id === hit.id ? null : { type: 'highlight', id: hit.id });
+      return;
+    }
+    const noted = noteRanges.find((r) => idx >= r.startIdx && idx <= r.endIdx)?.note;
+    if (noted) {
+      setSelected(selected?.id === noted.id ? null : { type: 'note', id: noted.id });
+      return;
+    }
+    setSelected(null);
+    narration.seek(idx, narration.isPlaying);
+  };
+
+  const onNoteMarkPress = (id: string) => {
+    clearConfirm();
+    setSelected(selected?.id === id ? null : { type: 'note', id });
+  };
+
+  // Returns whether narration should resume afterwards.
+  const run = (command: Command): boolean => {
+    const idx = narration.currentIdxRef.current;
+    switch (command.type) {
+      case 'pause':
+        say('Paused');
+        return false;
+      case 'play':
+        say('Playing');
+        return true;
+      case 'highlight':
+        addHighlight(sentenceAround(paragraphOf(idx), idx));
+        break;
+      case 'note':
+        if (!command.content) {
+          say('Say "Hey DODO, note…" followed by your note');
+          break;
+        }
+        addNote(idx, command.content);
+        break;
+      case 'repeat': {
+        const p = paragraphOf(idx);
+        narration.seek(sentenceAround(p, idx).startIdx, false);
+        say('Going back');
+        break;
+      }
+      case 'skip': {
+        const next = narration.paragraphs[narration.paragraphs.indexOf(paragraphOf(idx)) + 1];
+        if (next) narration.seek(next.words[0].idx, false);
+        say('Skipping ahead');
+        break;
+      }
+      case 'nextChapter': {
+        const next = chapterStarts.find((s) => s > idx);
+        if (next === undefined) say('This is the last chapter');
+        else {
+          narration.seek(next, false);
+          say('Next chapter');
+        }
+        break;
+      }
+      case 'previousChapter': {
+        const current = chapterStarts.filter((s) => s <= idx).length - 1;
+        narration.seek(chapterStarts[Math.max(0, current - 1)], false);
+        say('Previous chapter');
+        break;
+      }
+      case 'faster':
+        narration.changeRate(0.1);
+        say('Faster');
+        break;
+      case 'slower':
+        narration.changeRate(-0.1);
+        say('Slower');
+        break;
+      case 'unknown':
+        say(`Didn't catch that: “${command.heard}”`);
+        break;
+    }
+    return wasPlaying.current;
+  };
+
+  const voice = useWakeWord({
+    onWake: () => {
+      wasPlaying.current = narration.isPlaying;
+      narration.pause();
+    },
+    onCommand: (text) => {
+      if (run(parseCommand(text))) narration.play();
+    },
+    onCancel: () => {
+      if (wasPlaying.current) narration.play();
+    },
+  });
+
+  // Keep the paragraph being read on screen, hands-free.
+  const scroll = useRef<ScrollView>(null);
+  // onLayout y is relative to the parent, so keep chapter offsets and paragraph
+  // offsets (within their chapter) and add them to get a scroll position.
+  const chapterY = useRef<Record<number, number>>({});
+  const paragraphY = useRef<Record<number, { chapterIdx: number; y: number }>>({});
+  const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
+  useEffect(() => {
+    const entry = paragraphY.current[activeParagraph];
+    if (!entry) return;
+    const y = (chapterY.current[entry.chapterIdx] ?? 0) + entry.y;
+    scroll.current?.scrollTo({ y: Math.max(0, y - 120), animated: true });
+  }, [activeParagraph]);
+
+  const highlightAt = (idx: number) => highlights.find((h) => idx >= h.startIdx && idx <= h.endIdx);
+  const noteAt = (idx: number) => notes.find((n) => n.wordIdx === idx);
+  // Each note underlines the sentence it's attached to.
+  const noteRanges = notes.map((n) => ({
+    note: n,
+    ...sentenceContaining(paragraphOf(n.wordIdx), n.wordIdx),
+  }));
+  const notedAt = (idx: number) =>
+    noteRanges.find((r) => idx >= r.startIdx && idx <= r.endIdx)?.note;
+
+  const statusLabel = {
+    starting: 'Starting microphone…',
+    listening: 'Say “Hey DODO”',
+    awake: voice.heard ? `“${voice.heard}”` : 'Listening…',
+    denied: 'Microphone access denied, enable it in Settings',
+    error: `Voice unavailable (${voice.errorDetail}), tap to retry`,
+  }[voice.status];
+
+  return (
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <Text style={styles.bookTitle} numberOfLines={1}>
+        {book.title}
+      </Text>
+
+      {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
+      <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
+        <ScrollView
+          ref={scroll}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + DOCK_HEIGHT },
+          ]}>
+          {book.chapters.map((chapter) => (
+            <View
+              key={chapter.chapterIdx}
+              onLayout={(e) => (chapterY.current[chapter.chapterIdx] = e.nativeEvent.layout.y)}>
+              <Text style={styles.chapterTitle}>{chapter.title}</Text>
+              {chapter.paragraphs.map((p) => (
+                <Text
+                  key={p.paragraphIdx}
+                  style={styles.paragraph}
+                  onLayout={(e) =>
+                    (paragraphY.current[p.paragraphIdx] = {
+                      chapterIdx: chapter.chapterIdx,
+                      y: e.nativeEvent.layout.y,
+                    })
+                  }>
+                  {p.words.map((w) => {
+                    const highlight = highlightAt(w.idx);
+                    const note = noteAt(w.idx);
+                    const noted = notedAt(w.idx);
+                    return (
+                      <Text
+                        key={w.idx}
+                        onPress={() => onWordPress(w.idx)}
+                        onLongPress={() => addHighlight(sentenceContaining(p, w.idx))}
+                        style={[
+                          w.idx < narration.currentIdx && styles.spoken,
+                          highlight && styles.highlighted,
+                          highlight && highlight.id === selected?.id && styles.selected,
+                          noted && styles.noted,
+                          noted && noted.id === selected?.id && styles.notedSelected,
+                          w.idx === narration.currentIdx && styles.current,
+                        ]}>
+                        {w.text}
+                        {note && (
+                          <Text
+                            onPress={() => onNoteMarkPress(note.id)}
+                            style={[
+                              styles.noteMark,
+                              note.id === selected?.id && styles.noteMarkSelected,
+                            ]}>
+                            {' '}
+                            ✎
+                          </Text>
+                        )}{' '}
+                      </Text>
+                    );
+                  })}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </ScrollViewMarker>
+
+      {/* Floats over the text so the glass controls show the page through them. */}
+      <View
+        style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }]}
+        pointerEvents="box-none">
+        {/* Only shown when there's something to say; idle listening stays silent. */}
+        {(feedback || voice.status !== 'listening') && (
+          <Pressable
+            onPress={voice.status === 'error' ? voice.retry : undefined}
+            style={styles.status}>
+            <View style={[styles.dot, voice.status === 'awake' && styles.dotAwake]} />
+            <Text
+              style={[styles.statusText, voice.status === 'awake' && styles.statusTextAwake]}
+              numberOfLines={2}>
+              {feedback || statusLabel}
+            </Text>
+          </Pressable>
+        )}
+
+        <View style={styles.controls}>
+          <View style={styles.sideButton}>
+            <ActionButton
+              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
+              state={buttonState('highlight', highlightTarget)}
+              onPress={onHighlightButton}
+              accessibilityLabel="Highlight the sentence just read"
+            />
+          </View>
+
+          <Pressable
+            style={styles.playButton}
+            accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
+            onPress={() => (narration.isPlaying ? narration.pause() : narration.play())}>
+            <SymbolView
+              name={
+                narration.isPlaying
+                  ? { ios: 'pause.fill', android: 'pause', web: 'pause' }
+                  : { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }
+              }
+              tintColor={colors.background}
+              size={26}
+            />
+          </Pressable>
+
+          <View style={styles.sideButton}>
+            <ActionButton
+              icon={{ ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' }}
+              state={buttonState('note', noteTarget)}
+              onPress={onNoteButton}
+              accessibilityLabel="Write a note here"
+            />
+          </View>
+        </View>
+      </View>
+
+      <Modal
+        visible={noteAnchor !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNoteAnchor(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setNoteAnchor(null)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <Text style={styles.sheetTitle}>New note</Text>
+            {noteAnchor !== null && (
+              <Text style={styles.sheetContext} numberOfLines={1}>
+                at “…{contextBefore(noteAnchor)}”
+              </Text>
+            )}
+            <TextInput
+              style={styles.sheetInput}
+              value={noteDraft}
+              onChangeText={setNoteDraft}
+              placeholder="What's on your mind?"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              autoFocus
+            />
+            <View style={styles.sheetActions}>
+              <Pressable style={styles.sheetCancel} onPress={() => setNoteAnchor(null)}>
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.sheetSave, !noteDraft.trim() && styles.sheetSaveDisabled]}
+                disabled={!noteDraft.trim()}
+                onPress={saveNote}>
+                <Text style={styles.sheetSaveText}>Save note</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  fill: { flex: 1 },
+  // Minimal header: just the book, quietly centered.
+  bookTitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  content: { paddingHorizontal: 26, paddingTop: 28 },
+  chapterTitle: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  paragraph: {
+    color: colors.text,
+    fontFamily: READING_FONT,
+    fontSize: 21,
+    lineHeight: 36,
+    letterSpacing: 0.1,
+    marginBottom: 28,
+  },
+  // Already-read text dims slightly; still easy to reread.
+  spoken: { color: 'rgba(242, 237, 228, 0.62)' },
+  highlighted: { backgroundColor: colors.accentSoft, color: colors.text },
+  // Tapped highlight, ready to delete with the highlight button.
+  selected: { backgroundColor: colors.dangerSoft },
+  current: { color: colors.accent },
+  noteMark: { color: colors.accent, fontSize: 15 },
+  noteMarkSelected: { color: colors.danger },
+  // Dashed underline on text that has a note (dash style is iOS-only; Android draws solid).
+  noted: {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dashed',
+    textDecorationColor: colors.accent,
+  },
+  notedSelected: { textDecorationColor: colors.danger },
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+  },
+  statusText: { color: colors.textSecondary, fontSize: 13, textAlign: 'center', flexShrink: 1 },
+  statusTextAwake: { color: colors.accent },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.textSecondary },
+  dotAwake: { backgroundColor: colors.accent },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
+  sideButton: { width: 88, alignItems: 'center' },
+  playButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.45)' },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    gap: 10,
+  },
+  sheetTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
+  sheetContext: { color: colors.textSecondary, fontSize: 13 },
+  sheetInput: {
+    minHeight: 96,
+    maxHeight: 200,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 12,
+    color: colors.text,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 4 },
+  sheetCancel: { paddingHorizontal: 16, paddingVertical: 10 },
+  sheetCancelText: { color: colors.textSecondary, fontSize: 15, fontWeight: '500' },
+  sheetSave: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  sheetSaveDisabled: { opacity: 0.4 },
+  sheetSaveText: { color: colors.background, fontSize: 15, fontWeight: '600' },
+});

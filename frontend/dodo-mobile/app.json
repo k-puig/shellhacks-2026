@@ -6,10 +6,18 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dodomobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.duranmichael681.dodo-mobile"
+      "bundleIdentifier": "com.duranmichael681.dodo-mobile",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSSpeechRecognitionUsageDescription": "DODO turns your voice commands into actions like highlighting and notes.",
+        "NSMicrophoneUsageDescription": "DODO listens for \"Hey DODO\" so you can control your book hands-free."
+      },
+      "appleTeamId": "A4A5WJGF36"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +26,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -29,9 +40,16 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#15131C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "DODO listens for \"Hey DODO\" so you can control your book hands-free.",
+          "speechRecognitionPermission": "DODO turns your voice commands into actions like highlighting and notes."
         }
       ]
     ],
