@@ -74,6 +74,11 @@ export function useNarration(book: Book) {
     Speech.speak(text, {
       rate: rateRef.current,
       voice: voiceRef.current,
+      // iOS: share the app's playAndRecord session set up by the voice listener.
+      // A separate synthesizer session activates per utterance, which fires
+      // route changes that make the listener tear down and reconfigure the
+      // session, cutting the narrator out and flipping it to call audio.
+      useApplicationAudioSession: true,
       onBoundary: ({ charIndex }: { charIndex: number }) => {
         if (session.current !== mySession) return;
         let i = 0;

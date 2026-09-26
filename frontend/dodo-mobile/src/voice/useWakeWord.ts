@@ -9,7 +9,8 @@ import { AppState } from 'react-native';
 export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'denied' | 'error';
 
 // Speech recognizers mishear "dodo" a lot, so accept the common variants.
-const WAKE = /\b(?:hey|hi|ok|okay|a)[\s,]+(?:dodo|do do|doto|dodos|dough dough|toto|dudu)\b/g;
+// No bare "a dodo": the mic also hears the narrator, and books (Alice!) can say it.
+const WAKE = /\b(?:hey|hi|ok|okay)[\s,]+(?:dodo|do do|doto|dodos|dough dough|toto|dudu)\b/g;
 
 // How long to wait after the last word before treating the command as finished.
 const COMMAND_SILENCE_MS = 1300;
@@ -77,9 +78,12 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
         categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers'],
         mode: 'default',
       },
-      // Echo cancellation so the narrator's voice doesn't get transcribed.
-      // The simulator has no voice-processing audio unit, so skip it there.
-      iosVoiceProcessingEnabled: Device.isDevice,
+      // Keep voice processing (echo cancellation) OFF: on iOS it switches the
+      // audio session into "voiceChat" (phone-call) mode, which routes the
+      // narrator to the earpiece and ducks its volume, flipping back and forth
+      // on every recognition restart. Without it the mic may pick up the
+      // narration, which is harmless: the book never says "Hey DODO".
+      iosVoiceProcessingEnabled: false,
     });
   };
 
