@@ -1,4 +1,10 @@
 .direnv/
+.zed/
+*.env
+/data/
 
 # Backend secrets (Auth0, Postgres, storage keys): never commit
 backend/env
+
+# macOS folder metadata
+.DS_Store

@@ -1,8 +1,16 @@
 {
-  "tasks": {
-    "dev": "deno run --watch --allow-net main.ts"
-  },
   "imports": {
-    "@std/assert": "jsr:@std/assert@1"
+    "@auth0/auth0-hono": "npm:@auth0/auth0-hono@^1.2.6",
+    "@package/": "../../package/",
+    "@zod/zod": "jsr:@zod/zod@^4.6.5",
+    "hono": "npm:hono@^4.13.9",
+    "uuid": "npm:uuid@^14.0.2"
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-env main.ts"
+  },
+  "compilerOptions": {
+    "jsx": "precompile",
+    "jsxImportSource": "hono/jsx"
   }
 }

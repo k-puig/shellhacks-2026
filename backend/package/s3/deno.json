@@ -3,6 +3,7 @@
     "dev": "deno run --watch --allow-net main.ts"
   },
   "imports": {
+    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.1140.0",
     "@std/assert": "jsr:@std/assert@1"
   }
 }

@@ -19,15 +19,18 @@
         # Dev shells
         devShells = {
           default = pkgs.mkShell {
-            buildInputs = with pkgs; [
-              deno
-              nodejs_26
-              python314
+            buildInputs =
+              with pkgs;
+              pkgs.lib.optionals (system == "x86_64-linux") [ zed-editor-fhs ]
+              ++ [
+                deno
+                nodejs_26
+                python314
 
-              nil
-              nixd
-              nginx-language-server
-            ];
+                nil
+                nixd
+                nginx-language-server
+              ];
           };
 
           prod = pkgs.mkShell {

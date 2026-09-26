@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "experimentalDecorators": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["./app/*"],
+      "@package/*": ["./package/*"],
+      "@postgresql-schema/*": ["./package/database/schema/postgresql-schema/*"],
+      "@mongodb-schema/*": ["./package/database/schema/mongodb-schema/*"],
+    },
+  },
+}
