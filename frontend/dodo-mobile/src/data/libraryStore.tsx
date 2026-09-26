@@ -12,6 +12,7 @@ type LibraryState = {
   addHighlight: (h: Omit<Saved<Highlight>, 'id'>) => void;
   addNote: (n: Omit<Saved<Note>, 'id'>) => void;
   removeHighlight: (id: string) => void;
+  recolorHighlight: (id: string, color: string) => void;
   removeNote: (id: string) => void;
 };
 
@@ -36,6 +37,8 @@ export function LibraryProvider({ children }: PropsWithChildren) {
         addHighlight: (h) => setHighlights((all) => [...all, { ...h, id: newId('h') }]),
         addNote: (n) => setNotes((all) => [...all, { ...n, id: newId('n') }]),
         removeHighlight: (id) => setHighlights((all) => all.filter((h) => h.id !== id)),
+        recolorHighlight: (id, color) =>
+          setHighlights((all) => all.map((h) => (h.id === id ? { ...h, color } : h))),
         removeNote: (id) => setNotes((all) => all.filter((n) => n.id !== id)),
       }}>
       {children}

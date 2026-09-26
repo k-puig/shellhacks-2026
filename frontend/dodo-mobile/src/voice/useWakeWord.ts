@@ -4,6 +4,7 @@ import {
 } from 'expo-speech-recognition';
 import * as Device from 'expo-device';
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'denied' | 'error';
 
@@ -46,6 +47,9 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failures = useRef(0);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // iOS won't let us record in the background, so we stop while backgrounded
+  // (screen locked, app switched) and start fresh when the app is active again.
+  const foreground = useRef(AppState.currentState === 'active');
   // On-device recognition: no network and no server time limit. The simulator
   // has no on-device model, and some phones haven't downloaded it, so this
   // flips to server recognition if the local recognizer fails to start.
@@ -54,7 +58,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   );
 
   const start = () => {
-    if (!enabled.current) return;
+    if (!enabled.current || !foreground.current) return;
     ExpoSpeechRecognitionModule.start({
       lang: 'en-US',
       interimResults: true,
@@ -108,11 +112,14 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
 
   useSpeechRecognitionEvent('end', () => {
     // Restart right away normally; back off while it keeps failing.
-    if (enabled.current) setTimeout(start, 250 * 2 ** failures.current);
+    if (enabled.current && foreground.current) setTimeout(start, 250 * 2 ** failures.current);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
     if (event.error !== 'aborted') console.log('[dodo] speech error', event.error, event.message);
+    // Errors from the OS cutting the mic (screen lock, call, Siri) aren't real
+    // failures; the foreground handler restarts listening.
+    if (!foreground.current || event.error === 'interrupted') return;
     if (event.error === 'not-allowed') {
       enabled.current = false;
       setStatus('denied');
@@ -169,28 +176,65 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
     }
   });
 
-  useEffect(() => {
+  // Fresh start: clear any failure state, re-check permission (the user may
+  // have just enabled it in Settings), then begin listening.
+  const begin = () => {
+    if (timer.current) clearTimeout(timer.current);
+    awake.current = false;
+    failures.current = 0;
     enabled.current = true;
     ExpoSpeechRecognitionModule.requestPermissionsAsync().then(({ granted }) => {
-      if (granted) start();
-      else setStatus('denied');
+      if (!granted) {
+        enabled.current = false;
+        setStatus('denied');
+        return;
+      }
+      // Abort any half-dead session first; its "end" restarts us, and start()
+      // below covers the case where nothing was running.
+      ExpoSpeechRecognitionModule.abort();
+      setTimeout(start, 300);
+    });
+  };
+
+  const startFresh = () => {
+    setErrorDetail('');
+    setStatus('starting');
+    begin();
+  };
+
+  const stopForBackground = () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    // Drop a half-spoken command rather than acting on it later.
+    if (awake.current) handlers.current.onCancel();
+    awake.current = false;
+    draining.current = true;
+    ExpoSpeechRecognitionModule.abort();
+  };
+
+  useEffect(() => {
+    // State already starts at 'starting' on mount, so only kick off listening.
+    begin();
+    const sub = AppState.addEventListener('change', (state) => {
+      const isActive = state === 'active';
+      if (isActive === foreground.current) return;
+      foreground.current = isActive;
+      if (isActive) startFresh();
+      else if (state === 'background') stopForBackground();
     });
     return () => {
+      sub.remove();
       enabled.current = false;
       if (timer.current) clearTimeout(timer.current);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       ExpoSpeechRecognitionModule.abort();
     };
+    // Mount-only: begin/startFresh/stopForBackground only touch refs and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Turn listening back on after it gave up.
-  const retry = () => {
-    failures.current = 0;
-    enabled.current = true;
-    setErrorDetail('');
-    setStatus('starting');
-    start();
-  };
+  // Turn listening back on after it gave up (tap on "Voice unavailable").
+  const retry = startFresh;
 
   return { status, heard, errorDetail, retry };
 }

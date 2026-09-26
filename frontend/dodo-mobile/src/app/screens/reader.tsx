@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -18,7 +18,13 @@ import { ActionButton, type ActionState } from '@/components/ActionButton';
 import { useLibrary } from '@/data/libraryStore';
 import { getBook, type Book, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
-import { colors } from '@/theme';
+import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
+import {
+  interpretCommand,
+  isGeminiConfigured,
+  recentSentences,
+  splitSentences,
+} from '@/voice/geminiInterpreter';
 import { parseCommand, type Command } from '@/voice/parseCommand';
 import { useWakeWord } from '@/voice/useWakeWord';
 
@@ -93,14 +99,26 @@ function Reader({ book }: { book: Book }) {
 
   const chapterStarts = book.chapters.map((c) => c.paragraphs[0].words[0].idx);
 
-  // Shared by voice, the highlight button, and long-press.
-  const addHighlight = (range: { startIdx: number; endIdx: number }) => {
-    if (highlights.some((h) => h.startIdx === range.startIdx && h.endIdx === range.endIdx)) {
-      say('Already highlighted');
+  // Shared by voice, the highlight button, and long-press. Defaults to yellow;
+  // asking for a color on an existing highlight recolors it instead of stacking.
+  const addHighlight = (
+    range: { startIdx: number; endIdx: number },
+    colorName: HighlightColorName = 'yellow',
+  ) => {
+    const color = HIGHLIGHT_COLORS[colorName];
+    const existing = highlights.find(
+      (h) => h.startIdx === range.startIdx && h.endIdx === range.endIdx,
+    );
+    if (existing) {
+      if (existing.color === color) say('Already highlighted');
+      else {
+        library.recolorHighlight(existing.id, color);
+        say(`Changed to ${colorName}`);
+      }
       return;
     }
-    library.addHighlight({ bookId: book.id, ...range, color: colors.accent });
-    say('Highlighted');
+    library.addHighlight({ bookId: book.id, ...range, color });
+    say(colorName === 'yellow' ? 'Highlighted' : `Highlighted in ${colorName}`);
   };
 
   const addNote = (wordIdx: number, content: string) => {
@@ -109,6 +127,7 @@ function Reader({ book }: { book: Book }) {
   };
 
   const words = narration.paragraphs.flatMap((p) => p.words);
+  const sentences = useMemo(() => splitSentences(narration.paragraphs), [narration.paragraphs]);
   const contextBefore = (idx: number) =>
     words
       .filter((w) => w.idx > idx - 6 && w.idx <= idx)
@@ -211,7 +230,7 @@ function Reader({ book }: { book: Book }) {
         say('Playing');
         return true;
       case 'highlight':
-        addHighlight(sentenceAround(paragraphOf(idx), idx));
+        addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
         break;
       case 'note':
         if (!command.content) {
@@ -262,13 +281,53 @@ function Reader({ book }: { book: Book }) {
     return wasPlaying.current;
   };
 
+  // Highlight / note / unrecognized commands go to Gemini, which reads the
+  // recent sentences and decides exactly what to save. Narration resumes right
+  // away; the result lands when Gemini answers. Falls back to the simple rules
+  // (sentence just read, note at current word) if the request fails.
+  const understand = (text: string, command: Command) => {
+    const idx = narration.currentIdxRef.current;
+    const context = recentSentences(sentences, idx);
+    setFeedback('Thinking…');
+    if (wasPlaying.current) narration.play();
+
+    interpretCommand(text, context, words)
+      .then((result) => {
+        if (result.action === 'highlight') {
+          addHighlight({ startIdx: result.startIdx, endIdx: result.endIdx }, result.color);
+          say(result.reply);
+        } else if (result.action === 'note') {
+          library.addNote({ bookId: book.id, wordIdx: result.wordIdx, content: result.content });
+          say(result.reply);
+        } else {
+          say(result.reply);
+        }
+      })
+      .catch((error) => {
+        console.log('[dodo] Gemini failed, using fallback:', String(error));
+        if (command.type === 'highlight') {
+          addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
+        }
+        else if (command.type === 'note' && command.content) addNote(idx, command.content);
+        else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
+        else say(`Didn't catch that: “${text}”`);
+      });
+  };
+
   const voice = useWakeWord({
     onWake: () => {
       wasPlaying.current = narration.isPlaying;
       narration.pause();
     },
     onCommand: (text) => {
-      if (run(parseCommand(text))) narration.play();
+      const command = parseCommand(text);
+      const needsUnderstanding =
+        command.type === 'highlight' || command.type === 'note' || command.type === 'unknown';
+      if (needsUnderstanding && isGeminiConfigured()) {
+        understand(text, command);
+        return;
+      }
+      if (run(command)) narration.play();
     },
     onCancel: () => {
       if (wasPlaying.current) narration.play();
@@ -348,6 +407,7 @@ function Reader({ book }: { book: Book }) {
                         style={[
                           w.idx < narration.currentIdx && styles.spoken,
                           highlight && styles.highlighted,
+                          highlight && { backgroundColor: withAlpha(highlight.color, 0.28) },
                           highlight && highlight.id === selected?.id && styles.selected,
                           noted && styles.noted,
                           noted && noted.id === selected?.id && styles.notedSelected,
@@ -504,7 +564,8 @@ const styles = StyleSheet.create({
   },
   // Already-read text dims slightly; still easy to reread.
   spoken: { color: 'rgba(242, 237, 228, 0.62)' },
-  highlighted: { backgroundColor: colors.accentSoft, color: colors.text },
+  // Background comes from each highlight's own color (see withAlpha above).
+  highlighted: { color: colors.text },
   // Tapped highlight, ready to delete with the highlight button.
   selected: { backgroundColor: colors.dangerSoft },
   current: { color: colors.accent },

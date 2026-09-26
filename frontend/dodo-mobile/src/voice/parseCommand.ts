@@ -1,7 +1,9 @@
+import { HIGHLIGHT_COLOR_NAMES, type HighlightColorName } from '@/theme';
+
 export type Command =
   | { type: 'pause' }
   | { type: 'play' }
-  | { type: 'highlight' }
+  | { type: 'highlight'; color?: HighlightColorName }
   | { type: 'note'; content: string }
   | { type: 'repeat' }
   | { type: 'skip' }
@@ -24,7 +26,11 @@ export function parseCommand(raw: string): Command {
     const content = raw.trim().slice(note[0].length).replace(/^[\s,:]+/, '').trim();
     return { type: 'note', content };
   }
-  if (/\bhighlight|mark (?:that|this)|save (?:that|this)\b/.test(text)) return { type: 'highlight' };
+  if (/\bhighlight|mark (?:that|this)|save (?:that|this)\b/.test(text)) {
+    // Offline fallback for "highlight that in blue"; Gemini handles it normally.
+    const color = HIGHLIGHT_COLOR_NAMES.find((c) => new RegExp(`\\b${c}\\b`).test(text));
+    return color ? { type: 'highlight', color } : { type: 'highlight' };
+  }
   if (/\bnext chapter\b/.test(text)) return { type: 'nextChapter' };
   if (/\b(?:previous|last) chapter\b/.test(text)) return { type: 'previousChapter' };
   if (/\b(?:pause|stop|hold on|wait)\b/.test(text)) return { type: 'pause' };

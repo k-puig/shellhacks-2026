@@ -1,1 +1,4 @@
 .direnv/
+
+# Backend secrets (Auth0, Postgres, storage keys): never commit
+backend/env

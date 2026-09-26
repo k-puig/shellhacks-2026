@@ -26,6 +26,7 @@ export default function NotesScreen() {
         kind: 'Highlight',
         body: textBetween(h.startIdx, h.endIdx),
         context: '',
+        color: h.color,
       })),
     ...notes
       .filter((n) => n.bookId === book.id)
@@ -35,6 +36,7 @@ export default function NotesScreen() {
         kind: 'Note',
         body: n.content,
         context: textBetween(n.wordIdx - 4, n.wordIdx),
+        color: colors.accent,
       })),
   ].sort((a, b) => a.at - b.at);
 
@@ -55,7 +57,7 @@ export default function NotesScreen() {
             </View>
           ) : (
             items.map((item) => (
-              <View key={item.id} style={styles.card}>
+              <View key={item.id} style={[styles.card, { borderLeftColor: item.color }]}>
                 <Text style={styles.kind}>{item.kind}</Text>
                 <Text style={[styles.body, item.kind === 'Highlight' && styles.quote]}>
                   {item.body}
