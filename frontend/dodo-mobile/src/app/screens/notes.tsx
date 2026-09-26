@@ -2,53 +2,32 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
+import { BookCover } from '@/components/BookCover';
 import { useLibrary } from '@/data/libraryStore';
-import { getBook } from '@/data/mockBooks';
+import { mockBooks } from '@/data/mockBooks';
+import { groupSavedByBook } from '@/data/savedByBook';
 import { colors } from '@/theme';
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export default function NotesScreen() {
   const { currentBookId, highlights, notes } = useLibrary();
-  const book = getBook(currentBookId);
-  const words = book.chapters.flatMap((c) => c.paragraphs.flatMap((p) => p.words));
-  const textBetween = (start: number, end: number) =>
-    words
-      .filter((w) => w.idx >= start && w.idx <= end)
-      .map((w) => w.text)
-      .join(' ');
-
-  // One feed, ordered by where each item sits in the book.
-  const items = [
-    ...highlights
-      .filter((h) => h.bookId === book.id)
-      .map((h) => ({
-        id: h.id,
-        at: h.startIdx,
-        kind: 'Highlight',
-        body: textBetween(h.startIdx, h.endIdx),
-        context: '',
-        color: h.color,
-      })),
-    ...notes
-      .filter((n) => n.bookId === book.id)
-      .map((n) => ({
-        id: n.id,
-        at: n.wordIdx,
-        kind: 'Note',
-        body: n.content,
-        context: textBetween(n.wordIdx - 4, n.wordIdx),
-        color: colors.accent,
-      })),
-  ].sort((a, b) => a.at - b.at);
+  // One section per book, the one being read first.
+  const groups = groupSavedByBook(mockBooks, highlights, notes, currentBookId);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       {/* No iOS 26 blur band under the tab bar; content runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.title}>Notes</Text>
-          <Text style={styles.subtitle}>{book.title}</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Notes</Text>
+            {groups.length > 0 && (
+              <Text style={styles.subtitle}>Across {plural(groups.length, 'book')}</Text>
+            )}
+          </View>
 
-          {items.length === 0 ? (
+          {groups.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>Nothing saved yet</Text>
               <Text style={styles.emptyBody}>
@@ -56,13 +35,36 @@ export default function NotesScreen() {
               </Text>
             </View>
           ) : (
-            items.map((item) => (
-              <View key={item.id} style={[styles.card, { borderLeftColor: item.color }]}>
-                <Text style={styles.kind}>{item.kind}</Text>
-                <Text style={[styles.body, item.kind === 'Highlight' && styles.quote]}>
-                  {item.body}
-                </Text>
-                {item.context !== '' && <Text style={styles.context}>at “…{item.context}”</Text>}
+            groups.map(({ book, highlightCount, noteCount, items }) => (
+              <View key={book.id} style={styles.section}>
+                <View style={styles.bookHeader}>
+                  <BookCover book={book} style={styles.cover} />
+                  <View style={styles.bookInfo}>
+                    <Text style={styles.bookTitle} numberOfLines={2}>
+                      {book.title}
+                    </Text>
+                    <Text style={styles.bookMeta} numberOfLines={1}>
+                      {book.author} · {plural(highlightCount, 'highlight')} ·{' '}
+                      {plural(noteCount, 'note')}
+                    </Text>
+                  </View>
+                </View>
+
+                {items.map((item) => (
+                  <View
+                    key={item.id}
+                    style={[styles.card, { borderLeftColor: item.color ?? colors.accent }]}>
+                    <Text style={styles.kind}>
+                      {item.kind === 'highlight' ? 'Highlight' : 'Note'} · {item.chapterTitle}
+                    </Text>
+                    <Text style={[styles.body, item.kind === 'highlight' && styles.quote]}>
+                      {item.body}
+                    </Text>
+                    {item.context !== '' && (
+                      <Text style={styles.context}>at “…{item.context}”</Text>
+                    )}
+                  </View>
+                ))}
               </View>
             ))
           )}
@@ -74,9 +76,16 @@ export default function NotesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 20, paddingBottom: 40, gap: 12 },
+  content: { padding: 20, paddingBottom: 40, gap: 28 },
   title: { color: colors.text, fontSize: 32, fontWeight: '700', letterSpacing: -1 },
-  subtitle: { color: colors.textSecondary, fontSize: 15, marginBottom: 12 },
+  header: { gap: 4 },
+  subtitle: { color: colors.textSecondary, fontSize: 15 },
+  section: { gap: 12 },
+  bookHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cover: { width: 44, height: 64, borderRadius: 6 },
+  bookInfo: { flex: 1, gap: 2 },
+  bookTitle: { color: colors.text, fontSize: 19, fontWeight: '600' },
+  bookMeta: { color: colors.textSecondary, fontSize: 13 },
   empty: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, gap: 6 },
   emptyTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
   emptyBody: { color: colors.textSecondary, fontSize: 15, lineHeight: 22 },
