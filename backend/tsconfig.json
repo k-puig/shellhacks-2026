@@ -12,6 +12,7 @@
       "@app/*": ["./app/*"],
       "@package/*": ["./package/*"],
       "@postgresql-schema/*": ["./package/database/schema/postgresql-schema/*"],
+      "@mongodb-schema/*": ["./package/database/schema/mongodb-schema/*"],
     },
   },
 }

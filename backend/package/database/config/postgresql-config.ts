@@ -7,7 +7,7 @@ import {
   UserSchema,
 } from "@package/database/schema/postgresql-schema/index.ts";
 
-export async function connectDatabase() {
+export async function connectPostgresqlDatabase() {
   return await MikroORM.init({
     entities: [
       UserSchema,
@@ -24,4 +24,4 @@ export async function connectDatabase() {
   });
 }
 
-export default connectDatabase;
+export default connectPostgresqlDatabase;
