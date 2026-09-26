@@ -28,3 +28,46 @@ describe('readResult', () => {
     expect(readResult(['  '], true)).toBeNull();
   });
 });
+
+describe('wake word variants heard in noise', () => {
+  it.each([
+    'hey doe doe pause',
+    'hey do-do pause',
+    'hey doh doh pause',
+    'hey doodoo pause',
+    'hey todo pause',
+    "hey dodo's pause",
+    'Hey. Dodo, pause',
+    'okay dodo pause',
+  ])('wakes on "%s"', (heard) => {
+    expect(readResult([heard], false)).toEqual({ woke: true, command: 'pause' });
+  });
+
+  it.each([
+    'The Dodo suddenly called out',
+    'said the Dodo, and everybody',
+    'Hey! said the Dodo',
+    'a dodo',
+  ])('does not wake on book text "%s"', (heard) => {
+    expect(readResult([heard], false)).toBeNull();
+  });
+});
+
+describe('after tapping the mic button', () => {
+  const before = ' Without pictures or conversations';
+
+  it('only counts words said after the tap', () => {
+    expect(readResult([`${before} highlight that`], true, before)).toEqual({
+      woke: false,
+      command: 'highlight that',
+    });
+  });
+
+  it('takes a fresh segment whole', () => {
+    expect(readResult([' Pause'], true, before)).toEqual({ woke: false, command: 'pause' });
+  });
+
+  it('waits while nothing new has been said', () => {
+    expect(readResult([before], true, before)).toBeNull();
+  });
+});

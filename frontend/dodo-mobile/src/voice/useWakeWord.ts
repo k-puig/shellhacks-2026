@@ -25,7 +25,9 @@ const WAKE_TIMEOUT_MS = 5000;
 const MAX_FAILURES = 5;
 // Restart idle sessions this often so the transcript never grows unbounded
 // (and we stay under iOS's ~1 minute limit for server-based recognition).
+// Each restart is ~1 s of deafness, so on-device, which has no limit, waits longer.
 const SESSION_REFRESH_MS = 45_000;
+const ON_DEVICE_REFRESH_MS = 5 * 60_000;
 
 type Options = {
   onWake: () => void;
@@ -55,6 +57,10 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failures = useRef(0);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The current session's transcript so far, and what it was when the mic
+  // button was tapped, so only words said after the tap count as the command.
+  const lastTranscript = useRef('');
+  const tapSince = useRef('');
   // The native module can emit several "end" events for one session, and each
   // native start() rebuilds the audio engine and re-activates the session,
   // which cuts out the narrator. So only ever keep one restart pending.
@@ -76,8 +82,8 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
       lang: 'en-US',
       interimResults: true,
       continuous: true,
-      // Several guesses per phrase: "hey dodo" is often only the 2nd or 3rd.
-      maxAlternatives: 3,
+      // Several guesses per phrase: in a noisy room "hey dodo" is often not the 1st.
+      maxAlternatives: 5,
       requiresOnDeviceRecognition: onDevice.current,
       contextualStrings: ['Hey DODO', 'DODO'],
       androidIntentOptions: {
@@ -111,6 +117,7 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
 
   const reset = () => {
     vlog('reset() -> abort');
+    tapSince.current = '';
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     awake.current = false;
@@ -129,12 +136,16 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   useSpeechRecognitionEvent('start', () => {
     vlog('event start', { awake: awake.current, draining: draining.current });
     draining.current = false;
+    lastTranscript.current = '';
     if (!awake.current) setStatus('listening');
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      // Never cut someone off mid-command.
-      if (!awake.current) reset();
-    }, SESSION_REFRESH_MS);
+    refreshTimer.current = setTimeout(
+      () => {
+        // Never cut someone off mid-command.
+        if (!awake.current) reset();
+      },
+      onDevice.current ? ON_DEVICE_REFRESH_MS : SESSION_REFRESH_MS,
+    );
   });
 
   useSpeechRecognitionEvent('end', () => {
@@ -174,10 +185,9 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
     if (draining.current) return;
     failures.current = 0;
 
-    const read = readResult(
-      event.results.map((r) => r.transcript),
-      awake.current,
-    );
+    const transcripts = event.results.map((r) => r.transcript);
+    const read = readResult(transcripts, awake.current, tapSince.current);
+    lastTranscript.current = transcripts[0] ?? '';
     if (!read) return;
     vlog('read', JSON.stringify(read));
 
@@ -271,5 +281,18 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   // Turn listening back on after it gave up (tap on "Voice unavailable").
   const retry = startFresh;
 
-  return { status, heard, errorDetail, retry };
+  // Same as saying "Hey DODO": for the mic button, when the room is too loud.
+  const wake = () => {
+    if (awake.current || !enabled.current) return;
+    vlog('wake() by tap');
+    awake.current = true;
+    tapSince.current = lastTranscript.current;
+    setStatus('awake');
+    setHeard('');
+    handlers.current.onWake();
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => finish(''), WAKE_TIMEOUT_MS);
+  };
+
+  return { status, heard, errorDetail, retry, wake };
 }

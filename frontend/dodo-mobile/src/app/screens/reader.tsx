@@ -484,6 +484,16 @@ function Reader({ book }: { book: Book }) {
         )}
 
         <View style={styles.controls}>
+          {/* Same as saying "Hey DODO", for when the room is too loud. */}
+          <View style={styles.sideButton}>
+            <ActionButton
+              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
+              state="idle"
+              onPress={voice.status === 'error' ? voice.retry : voice.wake}
+              accessibilityLabel="Give DODO a voice command"
+            />
+          </View>
+
           <View style={styles.sideButton}>
             <ActionButton
               icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
