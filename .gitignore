@@ -1,4 +1,16 @@
 .direnv/
 .zed/
 *.env
+<<<<<<< Updated upstream
 data/
+=======
+/data/
+
+# Backend secrets (Auth0, Postgres, storage keys): never commit
+backend/env
+
+# macOS folder metadata
+.DS_Store
+
+.env.local
+>>>>>>> Stashed changes
