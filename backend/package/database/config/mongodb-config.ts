@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { MikroORM } from "@mikro-orm/mongodb";
 
 export async function connectMongoDatabase() {

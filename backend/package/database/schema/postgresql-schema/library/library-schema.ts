@@ -3,6 +3,6 @@ import { BaseSchema } from "@package/database/schema/postgresql-schema/base-sche
 
 @Entity({ tableName: "library" })
 export class LibrarySchema extends BaseSchema {
-  @Property()
+  @Property({ type: "string" })
   name!: string;
 }

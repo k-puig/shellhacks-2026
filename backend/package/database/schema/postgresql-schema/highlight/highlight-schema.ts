@@ -8,9 +8,9 @@ export class HighlightSchema extends BaseSchema {
   @ManyToOne(() => BookSchema)
   book!: Ref<BookSchema>;
 
-  @Property()
+  @Property({ type: "bigint" })
   start!: number;
 
-  @Property()
+  @Property({ type: "bigint" })
   end!: number;
 }
