@@ -41,3 +41,10 @@ export function parseCommand(raw: string): Command {
   if (/\b(?:slower|slow down)\b/.test(text)) return { type: 'slower' };
   return { type: 'unknown', heard: raw };
 }
+
+// Commands that are complete as soon as they're heard, so they run without
+// waiting for silence. Excludes anything that can still grow: "next" (→ "next
+// chapter"), highlights (→ "…in blue"), notes, and unrecognized requests.
+const INSTANT: Command['type'][] = ['pause', 'play', 'faster', 'slower', 'nextChapter', 'previousChapter'];
+
+export const isInstantCommand = (command: Command) => INSTANT.includes(command.type);

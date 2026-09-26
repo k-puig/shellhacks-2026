@@ -6,6 +6,7 @@ import * as Device from 'expo-device';
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { isInstantCommand, parseCommand } from './parseCommand';
 import { readResult } from './wakeCommand';
 
 // TEMPORARY: timeline of mic events and wake-word decisions, for debugging.
@@ -136,8 +137,10 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
 
   useSpeechRecognitionEvent('end', () => {
     vlog('event end', { enabled: enabled.current, foreground: foreground.current, failures: failures.current });
-    // Restart right away normally; back off while it keeps failing.
-    if (enabled.current && foreground.current) scheduleStart(250 * 2 ** failures.current);
+    // Restart right away normally, so "Hey DODO" is heard again quickly; back
+    // off while it keeps failing.
+    const delay = failures.current ? 250 * 2 ** failures.current : 100;
+    if (enabled.current && foreground.current) scheduleStart(delay);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
@@ -186,7 +189,8 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
     setHeard(command);
 
     if (timer.current) clearTimeout(timer.current);
-    if (event.isFinal && command) {
+    // Short commands like "pause" run as soon as they're heard.
+    if (command && (event.isFinal || isInstantCommand(parseCommand(command)))) {
       finish(command);
     } else {
       timer.current = setTimeout(
