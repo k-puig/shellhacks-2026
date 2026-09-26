@@ -6,11 +6,15 @@ import * as Device from 'expo-device';
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { readResult } from './wakeCommand';
+
+// TEMPORARY: timeline of mic events and wake-word decisions, for debugging.
+const t0 = Date.now();
+const vlog = (...args: unknown[]) =>
+  console.log(`[dodo-voice] ${((Date.now() - t0) / 1000).toFixed(2)}s`, ...args);
+
 export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'denied' | 'error';
 
-// Speech recognizers mishear "dodo" a lot, so accept the common variants.
-// No bare "a dodo": the mic also hears the narrator, and books (Alice!) can say it.
-const WAKE = /\b(?:hey|hi|ok|okay)[\s,]+(?:dodo|do do|doto|dodos|dough dough|toto|dudu)\b/g;
 
 // How long to wait after the last word before treating the command as finished.
 const COMMAND_SILENCE_MS = 1300;
@@ -63,6 +67,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   );
 
   const start = () => {
+    vlog('start()', { enabled: enabled.current, foreground: foreground.current });
     if (!enabled.current || !foreground.current) return;
     ExpoSpeechRecognitionModule.start({
       lang: 'en-US',
@@ -102,6 +107,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   };
 
   const reset = () => {
+    vlog('reset() -> abort');
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     awake.current = false;
@@ -110,6 +116,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   };
 
   const finish = (command: string) => {
+    vlog('finish', JSON.stringify(command));
     reset();
     setStatus('listening');
     if (command) handlers.current.onCommand(command);
@@ -117,6 +124,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   };
 
   useSpeechRecognitionEvent('start', () => {
+    vlog('event start', { awake: awake.current, draining: draining.current });
     draining.current = false;
     if (!awake.current) setStatus('listening');
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -127,11 +135,13 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   });
 
   useSpeechRecognitionEvent('end', () => {
+    vlog('event end', { enabled: enabled.current, foreground: foreground.current, failures: failures.current });
     // Restart right away normally; back off while it keeps failing.
     if (enabled.current && foreground.current) scheduleStart(250 * 2 ** failures.current);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
+    vlog('event error', event.error, event.message);
     if (event.error !== 'aborted') console.log('[dodo] speech error', event.error, event.message);
     // Errors from the OS cutting the mic (screen lock, call, Siri) aren't real
     // failures; the foreground handler restarts listening.
@@ -155,22 +165,16 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   });
 
   useSpeechRecognitionEvent('result', (event) => {
+    vlog('event result', { final: event.isFinal, draining: draining.current, awake: awake.current }, JSON.stringify(event.results.map((r) => r.transcript)));
     if (draining.current) return;
     failures.current = 0;
 
-    // Use the first alternative that contains the wake word.
-    let transcript = '';
-    let last: RegExpExecArray | undefined;
-    for (const alt of event.results) {
-      const text = alt.transcript.toLowerCase();
-      const found = [...text.matchAll(WAKE)].pop();
-      if (found) {
-        transcript = text;
-        last = found;
-        break;
-      }
-    }
-    if (!last) return;
+    const read = readResult(
+      event.results.map((r) => r.transcript),
+      awake.current,
+    );
+    if (!read) return;
+    vlog('read', JSON.stringify(read));
 
     if (!awake.current) {
       awake.current = true;
@@ -178,7 +182,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
       handlers.current.onWake();
     }
 
-    const command = transcript.slice(last.index + last[0].length).replace(/^[\s,.]+/, '').trim();
+    const { command } = read;
     setHeard(command);
 
     if (timer.current) clearTimeout(timer.current);
