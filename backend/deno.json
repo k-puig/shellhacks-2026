@@ -13,6 +13,8 @@
   "imports": {
     "@app/": "./app/",
     "@package/": "./package/",
+    "@postgresql-schema/": "./package/database/schema/postgresql-schema/",
+    "@mongodb-schema/": "./package/database/schema/mongodb-schema/",
     "@mikro-orm/core": "npm:@mikro-orm/core@^7.2.1",
     "@mikro-orm/decorators/legacy": "npm:@mikro-orm/decorators@^7.2.1/legacy",
     "@mikro-orm/postgresql": "npm:@mikro-orm/postgresql@^7.2.1",
