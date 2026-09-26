@@ -12,13 +12,13 @@ export class BookSchema extends BaseSchema {
   @ManyToOne(() => UserSchema)
   user!: Ref<UserSchema>;
 
-  @Property()
+  @Property({ type: "string" })
   title!: string;
 
-  @Property()
+  @Property({ type: "string" })
   author!: string;
 
-  @Property({ nullable: true })
+  @Property({ type: "date", nullable: true })
   lastAccessedAt?: Date;
 
   // saved in seconds

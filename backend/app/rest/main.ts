@@ -1,14 +1,19 @@
 import { Hono } from "hono";
-import { dummy } from "./dummy/router.ts";
-import { user } from "./user/router.ts";
+import { api } from "./api.ts";
+import { connectPostgresqlDatabase } from "@package/database/config/postgresql-config.ts";
+import { UserSchema } from "@package/database/schema/postgresql-schema/user/user-schema.ts";
 
-const api = new Hono();
+const orm = await connectPostgresqlDatabase();
+await orm.schema.refresh(); // Clear db if schema doesn't match, then regenerate
 
-api.get("/", (c) => {
-  return c.text("Hello Hono!");
-});
-api.route("/dummy", dummy);
-api.route("/user", user);
+// const em = orm.em.fork();
+// em.create(UserSchema, {
+//   username: "pingas",
+//   authId: "weegee",
+// });
+// em.flush();
+// const res = await em.findAll(UserSchema);
+// console.log(res);
 
 const app = new Hono();
 app.route("/api/v1", api);

@@ -1,5 +1,4 @@
 {
-  "name": "@dodo/backend",
   "workspace": ["./app/rest", "./package/database", "./package/s3"],
   "lock": {
     "path": "./deno.lock"
