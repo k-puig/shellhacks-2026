@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
-import type { Highlight, Note } from './mockBooks';
+import type { AskedQuestion, Highlight, Note } from './mockBooks';
 
 type Saved<T> = T & { bookId: string };
 
@@ -14,6 +14,9 @@ type LibraryState = {
   removeHighlight: (id: string) => void;
   recolorHighlight: (id: string, color: string) => void;
   removeNote: (id: string) => void;
+  askedQuestions: Saved<AskedQuestion>[];
+  addAskedQuestion: (q: Omit<Saved<AskedQuestion>, 'id'>) => void;
+  removeAskedQuestion: (id: string) => void;
 };
 
 const LibraryContext = createContext<LibraryState | null>(null);
@@ -26,6 +29,7 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   const [currentBookId, openBook] = useState('alice');
   const [highlights, setHighlights] = useState<Saved<Highlight>[]>([]);
   const [notes, setNotes] = useState<Saved<Note>[]>([]);
+  const [askedQuestions, setAskedQuestions] = useState<Saved<AskedQuestion>[]>([]);
 
   return (
     <LibraryContext.Provider
@@ -40,6 +44,9 @@ export function LibraryProvider({ children }: PropsWithChildren) {
         recolorHighlight: (id, color) =>
           setHighlights((all) => all.map((h) => (h.id === id ? { ...h, color } : h))),
         removeNote: (id) => setNotes((all) => all.filter((n) => n.id !== id)),
+        askedQuestions,
+        addAskedQuestion: (q) => setAskedQuestions((all) => [...all, { ...q, id: newId('q') }]),
+        removeAskedQuestion: (id) => setAskedQuestions((all) => all.filter((q) => q.id !== id)),
       }}>
       {children}
     </LibraryContext.Provider>

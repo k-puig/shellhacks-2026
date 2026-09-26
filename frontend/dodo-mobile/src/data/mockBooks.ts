@@ -19,6 +19,18 @@ export type Book = {
 export type Highlight = { id: string; startIdx: number; endIdx: number; color: string };
 export type Note = { id: string; wordIdx: number; content: string };
 
+// A question the listener asked DODO about the book, with its spoken answer.
+export type AskedQuestion = {
+  id: string;
+  wordIdx: number;
+  question: string;
+  answer: string;
+  // Short label for the Notes tab, e.g. "Why the Rabbit is late".
+  title: string;
+  // ISO timestamp.
+  askedAt: string;
+};
+
 function tokenize(
   meta: Omit<Book, 'chapters'>,
   raw: { title: string; paragraphs: string[] }[],

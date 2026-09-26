@@ -1,5 +1,5 @@
 import type { Book } from '../mockBooks';
-import { groupSavedByBook } from '../savedByBook';
+import { groupQuestionsByBook, groupSavedByBook } from '../savedByBook';
 
 // A two-chapter book whose words are "<prefix>0 <prefix>1 …", 5 words per chapter.
 function makeBook(id: string, title: string): Book {
@@ -86,5 +86,52 @@ describe('groupSavedByBook', () => {
     expect(
       groupSavedByBook(books, [{ id: 'h1', bookId: 'gone', startIdx: 0, endIdx: 1, color: '#ff0' }], [], 'a'),
     ).toEqual([]);
+  });
+});
+
+describe('groupQuestionsByBook', () => {
+  const asked = (id: string, bookId: string, wordIdx: number, askedAt: string) => ({
+    id,
+    bookId,
+    wordIdx,
+    question: `question ${id}`,
+    answer: `answer ${id}`,
+    title: `title ${id}`,
+    askedAt,
+  });
+
+  it('puts the current book first, then the rest alphabetically, hiding empty books', () => {
+    const groups = groupQuestionsByBook(
+      books,
+      [asked('q1', 'p', 0, '2026-09-26T10:00:00Z'), asked('q2', 'a', 0, '2026-09-26T10:00:00Z')],
+      'p',
+    );
+    expect(groups.map((g) => g.book.title)).toEqual(['Pride and Prejudice', "Alice's Adventures"]);
+  });
+
+  it('lists the newest question first within a book, with its chapter and passage', () => {
+    const [group] = groupQuestionsByBook(
+      books,
+      [asked('old', 'a', 2, '2026-09-26T10:00:00Z'), asked('new', 'a', 7, '2026-09-26T11:00:00Z')],
+      'a',
+    );
+    expect(group.items).toEqual([
+      {
+        id: 'new',
+        title: 'title new',
+        question: 'question new',
+        answer: 'answer new',
+        chapterTitle: 'Chapter 2',
+        passage: 'a3 a4 a5 a6 a7',
+      },
+      {
+        id: 'old',
+        title: 'title old',
+        question: 'question old',
+        answer: 'answer old',
+        chapterTitle: 'Chapter 1',
+        passage: 'a0 a1 a2',
+      },
+    ]);
   });
 });
