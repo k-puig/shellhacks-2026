@@ -833,41 +833,8 @@ function Reader({ book }: { book: Book }) {
           </Pressable>
         )}
 
-        {/* Tools fade when idle; previous / play / next always stay. */}
+        {/* Play stays at the bottom left; everything else fades when idle. */}
         <View style={styles.controls}>
-          <IdleFade visible={showSideButtons}>
-            <ActionButton
-              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
-              state={buttonState('highlight', highlightTarget)}
-              onPress={onHighlightButton}
-              accessibilityLabel="Highlight the sentence just read"
-            />
-          </IdleFade>
-
-          {/* Same as saying "Hey DODO", for when the room is too loud. */}
-          <IdleFade visible={showSideButtons}>
-            <ActionButton
-              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
-              state="idle"
-              onPress={onMicPress}
-              active={voice.status === 'awake' || narration.isSpeakingAside}
-              accessibilityLabel="Give DODO a voice command"
-            />
-          </IdleFade>
-
-          <Pressable
-            style={styles.chapterButton}
-            hitSlop={6}
-            onPress={onPreviousChapter}
-            accessibilityRole="button"
-            accessibilityLabel="Previous chapter">
-            <SymbolView
-              name={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }}
-              tintColor={colors.text}
-              size={22}
-            />
-          </Pressable>
-
           <Pressable
             style={styles.playButton}
             accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
@@ -888,18 +855,55 @@ function Reader({ book }: { book: Book }) {
             />
           </Pressable>
 
-          <Pressable
-            style={styles.chapterButton}
-            hitSlop={6}
-            onPress={onNextChapter}
-            accessibilityRole="button"
-            accessibilityLabel="Next chapter">
-            <SymbolView
-              name={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }}
-              tintColor={colors.text}
-              size={22}
+          <IdleFade visible={showSideButtons}>
+            <Pressable
+              style={styles.chapterButton}
+              hitSlop={6}
+              onPress={onPreviousChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Previous chapter">
+              <SymbolView
+                name={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }}
+                tintColor={colors.text}
+                size={22}
+              />
+            </Pressable>
+          </IdleFade>
+
+          <IdleFade visible={showSideButtons}>
+            <Pressable
+              style={styles.chapterButton}
+              hitSlop={6}
+              onPress={onNextChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Next chapter">
+              <SymbolView
+                name={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }}
+                tintColor={colors.text}
+                size={22}
+              />
+            </Pressable>
+          </IdleFade>
+
+          <IdleFade visible={showSideButtons}>
+            <ActionButton
+              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
+              state={buttonState('highlight', highlightTarget)}
+              onPress={onHighlightButton}
+              accessibilityLabel="Highlight the sentence just read"
             />
-          </Pressable>
+          </IdleFade>
+
+          {/* Same as saying "Hey DODO", for when the room is too loud. */}
+          <IdleFade visible={showSideButtons}>
+            <ActionButton
+              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
+              state="idle"
+              onPress={onMicPress}
+              active={voice.status === 'awake' || narration.isSpeakingAside}
+              accessibilityLabel="Give DODO a voice command"
+            />
+          </IdleFade>
 
           <IdleFade visible={showSideButtons}>
             <ActionButton
