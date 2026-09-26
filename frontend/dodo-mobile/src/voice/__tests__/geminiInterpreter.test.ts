@@ -20,3 +20,26 @@ describe('recentSentences', () => {
     expect(recentSentences(sentences, 25).map((s) => s.id)).toEqual(['s0', 's1', 's2']);
   });
 });
+
+describe('interpretCommand', () => {
+  it('hands questions about the book on to be answered', async () => {
+    process.env.EXPO_PUBLIC_GEMINI_API_KEY = 'test-key';
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify({ action: 'answer', reply: 'Good question' }) }] } },
+        ],
+      }),
+    })) as never;
+    let interpretCommand!: typeof import('../geminiInterpreter').interpretCommand;
+    // Fresh copy so it reads the key set above.
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      interpretCommand = require('../geminiInterpreter').interpretCommand;
+    });
+
+    const result = await interpretCommand('what is going on with her', sentences.slice(0, 3), []);
+    expect(result).toEqual({ action: 'answer', reply: 'Good question' });
+  });
+});

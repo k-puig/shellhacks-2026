@@ -1,21 +1,15 @@
+import { generateJson } from '@/ai/gemini';
 import type { Paragraph } from '@/data/mockBooks';
 import { HIGHLIGHT_COLOR_NAMES, type HighlightColorName } from '@/theme';
 
 // Turns what the user said after "Hey DODO" into a precise highlight or note,
 // using Gemini to understand the request against the text they just heard.
-//
-// The key is read from EXPO_PUBLIC_GEMINI_API_KEY (.env.local). EXPO_PUBLIC_ vars
-// are bundled into the app: fine for the hackathon demo, but move this call to
-// the backend before shipping.
 
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const MODEL = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-3.5-flash-lite';
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+export { isGeminiConfigured } from '@/ai/gemini';
+
 const TIMEOUT_MS = 8000;
 // How many sentences of recent narration Gemini gets to choose from.
 const CONTEXT_SENTENCES = 10;
-
-export const isGeminiConfigured = () => Boolean(API_KEY);
 
 export type Sentence = { id: string; startIdx: number; endIdx: number; text: string };
 
@@ -28,6 +22,7 @@ export type Interpretation =
       reply: string;
     }
   | { action: 'note'; wordIdx: number; content: string; reply: string }
+  | { action: 'answer'; reply: string }
   | { action: 'none'; reply: string };
 
 const endsSentence = (word: string) => /[.!?]["')\]]*$/.test(word);
@@ -67,7 +62,8 @@ You get the command (an English speech transcript, so expect filler words and sm
 Actions:
 - "highlight": the user wants part of the text highlighted. Put the ids of the sentence(s) they mean in sentenceIds (consecutive, in order). If they clearly mean only part of a sentence (a phrase or quote), also put those exact words, copied verbatim from the text, in quote. If they name a color, set color to the closest of: ${HIGHLIGHT_COLOR_NAMES.join(', ')} (e.g. "gold" → yellow, "red" → pink, "violet" → purple); otherwise leave color out.
 - "note": the user wants to save a note. Write the note in noteContent as clean, concise English in the user's own voice — fix transcription errors and drop filler like "um" or "write a note saying", but do not invent content. Put the id of the sentence the note is about in anchorSentenceId.
-- "none": the request is not about highlighting or notes, or you cannot tell what they mean.
+- "answer": the user is asking a question about the book (what a word means, why something happened, who someone is, what's going on). Leave the other fields out; DODO answers it separately.
+- "none": the request is not about highlighting, notes or the book, or you cannot tell what they mean.
 
 Resolving references: "that", "this", "just now" mean the sentence being read or the one right before it. "The last two sentences" means the two most recent. "The part about X" means the sentence(s) that mention X — search all provided sentences.
 
@@ -77,7 +73,7 @@ Always set reply: a very short confirmation shown on screen (max 8 words), e.g. 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    action: { type: 'STRING', enum: ['highlight', 'note', 'none'] },
+    action: { type: 'STRING', enum: ['highlight', 'note', 'answer', 'none'] },
     sentenceIds: { type: 'ARRAY', items: { type: 'STRING' } },
     quote: { type: 'STRING' },
     color: { type: 'STRING', enum: HIGHLIGHT_COLOR_NAMES },
@@ -98,42 +94,16 @@ type RawDecision = {
   reply?: unknown;
 };
 
-async function callGemini(command: string, context: Sentence[]): Promise<RawDecision> {
-  if (!API_KEY) throw new Error('EXPO_PUBLIC_GEMINI_API_KEY is not set');
-
-  const userText = JSON.stringify({
-    command,
-    sentences: context.map((s) => ({ id: s.id, text: s.text })),
+function callGemini(command: string, context: Sentence[]): Promise<RawDecision> {
+  return generateJson<RawDecision>({
+    system: SYSTEM_PROMPT,
+    user: JSON.stringify({
+      command,
+      sentences: context.map((s) => ({ id: s.id, text: s.text })),
+    }),
+    schema: RESPONSE_SCHEMA,
+    timeoutMs: TIMEOUT_MS,
   });
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const text: unknown = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof text !== 'string') {
-      throw new Error(`Gemini returned no text (finishReason: ${data?.candidates?.[0]?.finishReason})`);
-    }
-    return JSON.parse(text) as RawDecision;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 const normalize = (word: string) => word.toLowerCase().replace(/[^a-z0-9']/g, '');
@@ -192,6 +162,8 @@ export async function interpretCommand(
     const anchor = byId.get(String(raw.anchorSentenceId)) ?? context[context.length - 1];
     return { action: 'note', wordIdx: anchor.endIdx, content, reply: reply || 'Noted' };
   }
+
+  if (raw.action === 'answer') return { action: 'answer', reply };
 
   return { action: 'none', reply: reply || "Didn't catch that" };
 }
