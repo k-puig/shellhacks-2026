@@ -26,7 +26,7 @@ import { ScrollViewMarker } from 'react-native-screens/experimental';
 import { ActionButton, type ActionState } from '@/components/ActionButton';
 import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
-import { nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
+import { chapterIndexAt, nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
 import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
@@ -75,11 +75,12 @@ function IdleFade({ visible, children }: { visible: boolean; children: React.Rea
 type Saved<T> = T & { bookId: string };
 type NoteRange = { note: Saved<Note>; startIdx: number; endIdx: number };
 
-// The reader is a virtualized list of these rows, so only what's near the
-// screen exists even for a full-length book.
+// The reader is a virtualized list of these rows for the chapter being read,
+// so only what's near the screen exists even for a full-length book.
 type Row =
   | { kind: 'chapter'; key: string; title: string }
-  | { kind: 'paragraph'; key: string; paragraph: Paragraph };
+  | { kind: 'paragraph'; key: string; paragraph: Paragraph }
+  | { kind: 'next'; key: string; title: string };
 
 // One paragraph of words. Memoized: `readUpTo` is -1 before the paragraph is
 // reached and Infinity once it's read, so only the paragraph being read
@@ -583,18 +584,23 @@ function Reader({ book }: { book: Book }) {
   const dockStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
   }));
-  const rows = useMemo<Row[]>(
-    () =>
-      book.chapters.flatMap((c) => [
-        { kind: 'chapter' as const, key: `c${c.chapterIdx}`, title: c.title },
-        ...c.paragraphs.map((p) => ({
-          kind: 'paragraph' as const,
-          key: `p${p.paragraphIdx}`,
-          paragraph: p,
-        })),
-      ]),
-    [book],
-  );
+  // One chapter at a time: the one containing the word being read. Jumping
+  // anywhere swaps chapters and snaps to the spot, instead of the list
+  // estimating its way through thousands of unmeasured paragraphs.
+  const shownChapter = chapterIndexAt(book, narration.currentIdx);
+  const rows = useMemo<Row[]>(() => {
+    const c = book.chapters[shownChapter];
+    const next = book.chapters[shownChapter + 1];
+    return [
+      { kind: 'chapter' as const, key: `c${c.chapterIdx}`, title: c.title },
+      ...c.paragraphs.map((p) => ({
+        kind: 'paragraph' as const,
+        key: `p${p.paragraphIdx}`,
+        paragraph: p,
+      })),
+      ...(next ? [{ kind: 'next' as const, key: 'next', title: next.title }] : []),
+    ];
+  }, [book, shownChapter]);
   const rowOfParagraph = useMemo(
     () =>
       new Map(
@@ -610,14 +616,19 @@ function Reader({ book }: { book: Book }) {
   // instead of animating through everything in between.
   const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
   const lastScrollRow = useRef<number | null>(null);
+  const lastScrollChapter = useRef(shownChapter);
   const scrollAnimated = useRef(false);
   useEffect(() => {
     const index = rowOfParagraph.get(activeParagraph);
     if (index === undefined) return;
-    const from = lastScrollRow.current;
+    // A new chapter is a fresh list: snap.
+    const from = lastScrollChapter.current === shownChapter ? lastScrollRow.current : null;
+    lastScrollChapter.current = shownChapter;
     scrollAnimated.current = from !== null && Math.abs(index - from) <= NEARBY_ROWS;
     lastScrollRow.current = index;
     scroll.current?.scrollToIndex({ index, viewPosition: 0.15, animated: scrollAnimated.current });
+    // shownChapter always changes together with rowOfParagraph.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeParagraph, rowOfParagraph]);
 
   // Each note underlines the sentence it's attached to.
@@ -632,10 +643,21 @@ function Reader({ book }: { book: Book }) {
     [notes, narration.paragraphs],
   );
 
+  const onPreviousChapter = () =>
+    narration.seek(
+      previousChapterTarget(book, narration.currentIdxRef.current),
+      narration.isPlaying,
+    );
+  const onNextChapter = () => {
+    const next = nextChapterStart(book, narration.currentIdxRef.current);
+    if (next === null) say('This is the last chapter');
+    else narration.seek(next, narration.isPlaying);
+  };
+
   // Stable handlers for the memoized rows; the latest versions live in a ref.
-  const rowHandlers = useRef({ onWordPress, onNoteMarkPress, addHighlight });
+  const rowHandlers = useRef({ onWordPress, onNoteMarkPress, addHighlight, onNextChapter: () => {} });
   useEffect(() => {
-    rowHandlers.current = { onWordPress, onNoteMarkPress, addHighlight };
+    rowHandlers.current = { onWordPress, onNoteMarkPress, addHighlight, onNextChapter };
   });
   const onRowWordPress = useCallback((idx: number) => rowHandlers.current.onWordPress(idx), []);
   const onRowWordLongPress = useCallback(
@@ -658,6 +680,17 @@ function Reader({ book }: { book: Book }) {
   const renderRow = ({ item }: { item: Row }) =>
     item.kind === 'chapter' ? (
       <Text style={styles.chapterTitle}>{item.title}</Text>
+    ) : item.kind === 'next' ? (
+      <Pressable
+        style={styles.nextChapter}
+        onPress={() => rowHandlers.current.onNextChapter()}
+        accessibilityRole="button"
+        accessibilityLabel={`Next chapter: ${item.title}`}>
+        <Text style={styles.nextChapterLabel}>Next chapter</Text>
+        <Text style={styles.nextChapterTitle} numberOfLines={2}>
+          {item.title} →
+        </Text>
+      </Pressable>
     ) : (
       <ParagraphRow
         paragraph={item.paragraph}
@@ -692,16 +725,6 @@ function Reader({ book }: { book: Book }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeParagraph, narration.isPlaying]);
 
-  const onPreviousChapter = () =>
-    narration.seek(
-      previousChapterTarget(book, narration.currentIdxRef.current),
-      narration.isPlaying,
-    );
-  const onNextChapter = () => {
-    const next = nextChapterStart(book, narration.currentIdxRef.current);
-    if (next === null) say('This is the last chapter');
-    else narration.seek(next, narration.isPlaying);
-  };
 
   const statusLabel = {
     starting: 'Starting microphone…',
@@ -750,6 +773,8 @@ function Reader({ book }: { book: Book }) {
       {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
         <Animated.FlatList
+          // A fresh list per chapter, starting at its top.
+          key={shownChapter}
           ref={scroll}
           data={rows}
           keyExtractor={(row: Row) => row.key}
@@ -1002,6 +1027,16 @@ const styles = StyleSheet.create({
   dotAwake: { backgroundColor: colors.accent },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
   sideButton: { width: 56, alignItems: 'center' },
+  nextChapter: {
+    marginTop: 28,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    gap: 4,
+  },
+  nextChapterLabel: { color: colors.textSecondary, fontSize: 13 },
+  nextChapterTitle: { color: colors.accent, fontSize: 17, fontWeight: '600' },
   chapterButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleButton: {
     flexDirection: 'row',
