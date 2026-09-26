@@ -33,7 +33,6 @@ const WALK_DISTANCE = 56;
 const STEP_MS = 150;
 const EGG_DROP_AT = 1050;
 const EGG_FALL_MS = 360;
-const IMPACT_AT = EGG_DROP_AT + EGG_FALL_MS;
 const LETTER_DELAY_MS = 1600;
 const LETTER_STAGGER_MS = 60;
 const LETTER_MS = 420;
@@ -136,10 +135,12 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
 
     // 2. An egg drops from above...
     eggOpacity.value = withDelay(EGG_DROP_AT, withTiming(1, { duration: 60 }));
-    eggY.value = withDelay(EGG_DROP_AT, withTiming(0, { duration: EGG_FALL_MS, easing: FALL }));
-
-    // 3. ...bonk: the dodo squashes and wobbles; the egg bounces off, spinning away.
-    at(IMPACT_AT, () => {
+    // 3. ...and the moment it lands (on the animation thread, so it's always
+    // on the head, never early), bonk: the dodo squashes and wobbles and the
+    // egg bounces off, spinning away.
+    const bonk = (landed?: boolean) => {
+      'worklet';
+      if (!landed) return;
       squashY.value = withSequence(
         withTiming(0.9, { duration: 70 }),
         withSpring(1, { damping: 9, stiffness: 280 }),
@@ -152,14 +153,18 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
         withTiming(-8, { duration: 90 }),
         withSpring(0, { damping: 7, stiffness: 200 }),
       );
-      eggY.value = withSequence(
-        withTiming(-36, { duration: 200, easing: EASE_OUT }),
-        withTiming(130, { duration: 380, easing: FALL }),
-      );
       eggX.value = withTiming(52, { duration: 580 });
       eggSpin.value = withTiming(220, { duration: 580 });
       eggOpacity.value = withDelay(420, withTiming(0, { duration: 160 }));
-    });
+    };
+    eggY.value = withDelay(
+      EGG_DROP_AT,
+      withSequence(
+        withTiming(0, { duration: EGG_FALL_MS, easing: FALL }, bonk),
+        withTiming(-36, { duration: 200, easing: EASE_OUT }),
+        withTiming(130, { duration: 380, easing: FALL }),
+      ),
+    );
 
     at(HOLD_UNTIL_MS, finish);
 
@@ -248,11 +253,11 @@ const styles = StyleSheet.create({
   bird: { width: 220 * K, height: 200 * K, transformOrigin: 'bottom' },
   body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
   leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K, transformOrigin: 'top' },
-  // Resting position: sitting on top of the head, bottom edge at HEAD_TOP.
+  // Contact position: bottom edge just into the top of the head (HEAD_TOP).
   egg: {
     position: 'absolute',
     left: HEAD_X - EGG_W / 2,
-    top: HEAD_TOP - EGG_H + 2,
+    top: HEAD_TOP - EGG_H + 4,
     width: EGG_W,
     height: EGG_H,
   },
