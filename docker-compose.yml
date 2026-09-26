@@ -1,6 +1,8 @@
 services:
   dodo-rest:
-
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
 
   rustfs:
     image: rustfs/rustfs:latest
