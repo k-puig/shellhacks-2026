@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property } from "@mikro-orm/decorators/legacy";
 
 // base schema that is inherited by all other schemas
 // BE CAREFUL CHANGING THIS. THIS WILL AFFECT ALL SCHEMAS

@@ -1,4 +1,5 @@
-import { Entity, OneToOne, Property, Ref } from "@mikro-orm/core";
+import type { Ref } from "@mikro-orm/core";
+import { Entity, OneToOne, Property } from "@mikro-orm/decorators/legacy";
 import { BaseSchema } from "@package/database/schema/base-schema.ts";
 import { HighlightSchema } from "@package/database/schema/highlight/highlight-schema.ts";
 
@@ -7,6 +8,6 @@ export class NoteSchema extends BaseSchema {
   @OneToOne(() => HighlightSchema)
   highlight!: Ref<HighlightSchema>;
 
-  @Property({ type: "varchar", length: 1000 })
+  @Property({ type: "text" })
   text!: string;
 }

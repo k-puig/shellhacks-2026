@@ -1,4 +1,5 @@
-import { Entity, ManyToOne, Property, Ref } from "@mikro-orm/core";
+import type { Ref } from "@mikro-orm/core";
+import { Entity, ManyToOne, Property } from "@mikro-orm/decorators/legacy";
 import { BaseSchema } from "@package/database/schema/base-schema.ts";
 import { LibrarySchema } from "@package/database/schema/library/library-schema.ts";
 import { UserSchema } from "@package/database/schema/user/user-schema.ts";
