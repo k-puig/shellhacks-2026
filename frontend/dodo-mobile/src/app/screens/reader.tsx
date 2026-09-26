@@ -1,7 +1,8 @@
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,7 +25,7 @@ import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 import { ActionButton, type ActionState } from '@/components/ActionButton';
 import { useLibrary } from '@/data/libraryStore';
-import { getBook, type Book, type Paragraph } from '@/data/mockBooks';
+import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
 import {
@@ -67,6 +68,83 @@ function IdleFade({ visible, children }: { visible: boolean; children: React.Rea
   );
 }
 
+type Saved<T> = T & { bookId: string };
+type NoteRange = { note: Saved<Note>; startIdx: number; endIdx: number };
+
+// The reader is a virtualized list of these rows, so only what's near the
+// screen exists even for a full-length book.
+type Row =
+  | { kind: 'chapter'; key: string; title: string }
+  | { kind: 'paragraph'; key: string; paragraph: Paragraph };
+
+// One paragraph of words. Memoized: `readUpTo` is -1 before the paragraph is
+// reached and Infinity once it's read, so only the paragraph being read
+// re-renders as narration moves.
+const ParagraphRow = memo(function ParagraphRow({
+  paragraph,
+  readUpTo,
+  highlights,
+  notes,
+  noteRanges,
+  selectedId,
+  onWordPress,
+  onWordLongPress,
+  onNoteMarkPress,
+}: {
+  paragraph: Paragraph;
+  readUpTo: number;
+  highlights: Saved<Highlight>[];
+  notes: Saved<Note>[];
+  noteRanges: NoteRange[];
+  selectedId: string | undefined;
+  onWordPress: (idx: number) => void;
+  onWordLongPress: (paragraph: Paragraph, idx: number) => void;
+  onNoteMarkPress: (id: string) => void;
+}) {
+  const first = paragraph.words[0].idx;
+  const last = paragraph.words[paragraph.words.length - 1].idx;
+  const mine = <T extends { startIdx: number; endIdx: number }>(xs: T[]) =>
+    xs.filter((x) => x.endIdx >= first && x.startIdx <= last);
+  const rowHighlights = mine(highlights);
+  const rowNoteRanges = mine(noteRanges);
+  const rowNotes = notes.filter((n) => n.wordIdx >= first && n.wordIdx <= last);
+
+  return (
+    <Text style={styles.paragraph}>
+      {paragraph.words.map((w) => {
+        const highlight = rowHighlights.find((h) => w.idx >= h.startIdx && w.idx <= h.endIdx);
+        const note = rowNotes.find((n) => n.wordIdx === w.idx);
+        const noted = rowNoteRanges.find((r) => w.idx >= r.startIdx && w.idx <= r.endIdx)?.note;
+        return (
+          <Text
+            key={w.idx}
+            onPress={() => onWordPress(w.idx)}
+            onLongPress={() => onWordLongPress(paragraph, w.idx)}
+            style={[
+              w.idx < readUpTo && styles.spoken,
+              highlight && styles.highlighted,
+              highlight && { backgroundColor: withAlpha(highlight.color, 0.28) },
+              highlight && highlight.id === selectedId && styles.selected,
+              noted && styles.noted,
+              noted && noted.id === selectedId && styles.notedSelected,
+              w.idx === readUpTo && styles.current,
+            ]}>
+            {w.text}
+            {note && (
+              <Text
+                onPress={() => onNoteMarkPress(note.id)}
+                style={[styles.noteMark, note.id === selectedId && styles.noteMarkSelected]}>
+                {' '}
+                ✎
+              </Text>
+            )}{' '}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+});
+
 // Book text uses a serif; Georgia ships with iOS, "serif" maps to Noto Serif on Android.
 const READING_FONT = Platform.select({ ios: 'Georgia', default: 'serif' });
 
@@ -104,8 +182,14 @@ function Reader({ book }: { book: Book }) {
   const narration = useNarration(book);
   const library = useLibrary();
   const insets = useSafeAreaInsets();
-  const highlights = library.highlights.filter((h) => h.bookId === book.id);
-  const notes = library.notes.filter((n) => n.bookId === book.id);
+  const highlights = useMemo(
+    () => library.highlights.filter((h) => h.bookId === book.id),
+    [library.highlights, book.id],
+  );
+  const notes = useMemo(
+    () => library.notes.filter((n) => n.bookId === book.id),
+    [library.notes, book.id],
+  );
 
   const [feedback, setFeedback] = useState('');
   // Word the note being typed is attached to; null when the composer is closed.
@@ -170,7 +254,7 @@ function Reader({ book }: { book: Book }) {
     say(`Noted: “${content}”`);
   };
 
-  const words = narration.paragraphs.flatMap((p) => p.words);
+  const words = useMemo(() => narration.paragraphs.flatMap((p) => p.words), [narration.paragraphs]);
   const sentences = useMemo(() => splitSentences(narration.paragraphs), [narration.paragraphs]);
   const contextBefore = (idx: number) =>
     words
@@ -455,8 +539,8 @@ function Reader({ book }: { book: Book }) {
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });
 
-  // Keep the paragraph being read on screen, hands-free.
-  const scroll = useRef<Animated.ScrollView>(null);
+  // The reader's list, for autoscrolling to the paragraph being read.
+  const scroll = useRef<FlatList<Row>>(null);
 
   // Controls drop once when scrolling down (as the tab bar minimizes) and stay
   // down: scrolling back up doesn't bounce them, only returning to the top does.
@@ -495,27 +579,88 @@ function Reader({ book }: { book: Book }) {
   const dockStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
   }));
-  // onLayout y is relative to the parent, so keep chapter offsets and paragraph
-  // offsets (within their chapter) and add them to get a scroll position.
-  const chapterY = useRef<Record<number, number>>({});
-  const paragraphY = useRef<Record<number, { chapterIdx: number; y: number }>>({});
+  const rows = useMemo<Row[]>(
+    () =>
+      book.chapters.flatMap((c) => [
+        { kind: 'chapter' as const, key: `c${c.chapterIdx}`, title: c.title },
+        ...c.paragraphs.map((p) => ({
+          kind: 'paragraph' as const,
+          key: `p${p.paragraphIdx}`,
+          paragraph: p,
+        })),
+      ]),
+    [book],
+  );
+  const rowOfParagraph = useMemo(
+    () =>
+      new Map(
+        rows.flatMap((r, i) =>
+          r.kind === 'paragraph' ? [[r.paragraph.paragraphIdx, i] as const] : [],
+        ),
+      ),
+    [rows],
+  );
+
+  // Keep the paragraph being read on screen, hands-free.
   const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
   useEffect(() => {
-    const entry = paragraphY.current[activeParagraph];
-    if (!entry) return;
-    const y = (chapterY.current[entry.chapterIdx] ?? 0) + entry.y;
-    scroll.current?.scrollTo({ y: Math.max(0, y - 120), animated: true });
-  }, [activeParagraph]);
+    const index = rowOfParagraph.get(activeParagraph);
+    if (index !== undefined) {
+      scroll.current?.scrollToIndex({ index, viewPosition: 0.15, animated: true });
+    }
+  }, [activeParagraph, rowOfParagraph]);
 
-  const highlightAt = (idx: number) => highlights.find((h) => idx >= h.startIdx && idx <= h.endIdx);
-  const noteAt = (idx: number) => notes.find((n) => n.wordIdx === idx);
   // Each note underlines the sentence it's attached to.
-  const noteRanges = notes.map((n) => ({
-    note: n,
-    ...sentenceContaining(paragraphOf(n.wordIdx), n.wordIdx),
-  }));
-  const notedAt = (idx: number) =>
-    noteRanges.find((r) => idx >= r.startIdx && idx <= r.endIdx)?.note;
+  const noteRanges = useMemo(
+    () =>
+      notes.map((n) => ({
+        note: n,
+        ...sentenceContaining(paragraphOf(n.wordIdx), n.wordIdx),
+      })),
+    // paragraphOf only reads the book's paragraphs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [notes, narration.paragraphs],
+  );
+
+  // Stable handlers for the memoized rows; the latest versions live in a ref.
+  const rowHandlers = useRef({ onWordPress, onNoteMarkPress, addHighlight });
+  useEffect(() => {
+    rowHandlers.current = { onWordPress, onNoteMarkPress, addHighlight };
+  });
+  const onRowWordPress = useCallback((idx: number) => rowHandlers.current.onWordPress(idx), []);
+  const onRowWordLongPress = useCallback(
+    (paragraph: Paragraph, idx: number) =>
+      rowHandlers.current.addHighlight(sentenceContaining(paragraph, idx)),
+    [],
+  );
+  const onRowNoteMarkPress = useCallback(
+    (id: string) => rowHandlers.current.onNoteMarkPress(id),
+    [],
+  );
+
+  const readUpTo = (p: Paragraph) => {
+    const current = narration.currentIdx;
+    if (current < p.words[0].idx) return -1;
+    if (current > p.words[p.words.length - 1].idx) return Infinity;
+    return current;
+  };
+
+  const renderRow = ({ item }: { item: Row }) =>
+    item.kind === 'chapter' ? (
+      <Text style={styles.chapterTitle}>{item.title}</Text>
+    ) : (
+      <ParagraphRow
+        paragraph={item.paragraph}
+        readUpTo={readUpTo(item.paragraph)}
+        highlights={highlights}
+        notes={notes}
+        noteRanges={noteRanges}
+        selectedId={selected?.id}
+        onWordPress={onRowWordPress}
+        onWordLongPress={onRowWordLongPress}
+        onNoteMarkPress={onRowNoteMarkPress}
+      />
+    );
 
   const statusLabel = {
     starting: 'Starting microphone…',
@@ -551,67 +696,39 @@ function Reader({ book }: { book: Book }) {
 
       {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
-        <Animated.ScrollView
+        <Animated.FlatList
           ref={scroll}
+          data={rows}
+          keyExtractor={(row: Row) => row.key}
+          renderItem={renderRow}
+          // Re-run renderItem as narration moves; memoized rows skip the work.
+          extraData={[narration.currentIdx, highlights, notes, noteRanges, selected]}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={11}
           onScroll={onScroll}
           scrollEventThrottle={16}
+          onScrollToIndexFailed={(info) => {
+            // Rows far away haven't been measured yet: jump near, then settle.
+            scroll.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: false,
+            });
+            setTimeout(
+              () =>
+                scroll.current?.scrollToIndex({
+                  index: info.index,
+                  viewPosition: 0.15,
+                  animated: true,
+                }),
+              50,
+            );
+          }}
           contentContainerStyle={[
             styles.content,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + DOCK_HEIGHT },
-          ]}>
-          {book.chapters.map((chapter) => (
-            <View
-              key={chapter.chapterIdx}
-              onLayout={(e) => (chapterY.current[chapter.chapterIdx] = e.nativeEvent.layout.y)}>
-              <Text style={styles.chapterTitle}>{chapter.title}</Text>
-              {chapter.paragraphs.map((p) => (
-                <Text
-                  key={p.paragraphIdx}
-                  style={styles.paragraph}
-                  onLayout={(e) =>
-                    (paragraphY.current[p.paragraphIdx] = {
-                      chapterIdx: chapter.chapterIdx,
-                      y: e.nativeEvent.layout.y,
-                    })
-                  }>
-                  {p.words.map((w) => {
-                    const highlight = highlightAt(w.idx);
-                    const note = noteAt(w.idx);
-                    const noted = notedAt(w.idx);
-                    return (
-                      <Text
-                        key={w.idx}
-                        onPress={() => onWordPress(w.idx)}
-                        onLongPress={() => addHighlight(sentenceContaining(p, w.idx))}
-                        style={[
-                          w.idx < narration.currentIdx && styles.spoken,
-                          highlight && styles.highlighted,
-                          highlight && { backgroundColor: withAlpha(highlight.color, 0.28) },
-                          highlight && highlight.id === selected?.id && styles.selected,
-                          noted && styles.noted,
-                          noted && noted.id === selected?.id && styles.notedSelected,
-                          w.idx === narration.currentIdx && styles.current,
-                        ]}>
-                        {w.text}
-                        {note && (
-                          <Text
-                            onPress={() => onNoteMarkPress(note.id)}
-                            style={[
-                              styles.noteMark,
-                              note.id === selected?.id && styles.noteMarkSelected,
-                            ]}>
-                            {' '}
-                            ✎
-                          </Text>
-                        )}{' '}
-                      </Text>
-                    );
-                  })}
-                </Text>
-              ))}
-            </View>
-          ))}
-        </Animated.ScrollView>
+          ]}
+        />
       </ScrollViewMarker>
 
       {/* Floats over the text so the glass controls show the page through them. */}

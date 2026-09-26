@@ -55,7 +55,7 @@ const gutenbergCover = (id: number) =>
   `https://www.gutenberg.org/cache/epub/${id}/pg${id}.cover.medium.jpg`;
 
 // All excerpts are public domain.
-export const mockBooks: Book[] = [
+const sampleBooks: Book[] = [
   tokenize({ id: 'alice', title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll', coverColor: '#6B4E8C', coverUrl: gutenbergCover(11), progress: 0.12 }, [
     {
       title: 'Chapter I: Down the Rabbit-Hole',
@@ -103,6 +103,22 @@ export const mockBooks: Book[] = [
     },
   ]),
 ];
+
+// A full-length test book converted locally from an EPUB with
+// scripts/epub_to_book.py. It's git-ignored (copyrighted), so this require is
+// optional: without the file, the sample books above are used.
+function loadTestBook(): Book | null {
+  try {
+    return require('./generated/testBook.json') as Book;
+  } catch {
+    return null;
+  }
+}
+
+const testBook = loadTestBook();
+
+// The library: the local test book when present, instead of the samples.
+export const mockBooks: Book[] = testBook ? [testBook] : sampleBooks;
 
 export function getBook(id: string | undefined): Book {
   return mockBooks.find((b) => b.id === id) ?? mockBooks[0];

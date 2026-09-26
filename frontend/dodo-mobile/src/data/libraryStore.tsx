@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
-import type { AskedQuestion, Highlight, Note } from './mockBooks';
+import { mockBooks, type AskedQuestion, type Highlight, type Note } from './mockBooks';
 
 type Saved<T> = T & { bookId: string };
 
@@ -26,7 +26,7 @@ const newId = (prefix: string) => `${prefix}${Date.now()}-${nextId++}`;
 
 // In-memory for the MVP; swap for TanStack Query + the backend later.
 export function LibraryProvider({ children }: PropsWithChildren) {
-  const [currentBookId, openBook] = useState('alice');
+  const [currentBookId, openBook] = useState(mockBooks[0].id);
   const [highlights, setHighlights] = useState<Saved<Highlight>[]>([]);
   const [notes, setNotes] = useState<Saved<Note>[]>([]);
   const [askedQuestions, setAskedQuestions] = useState<Saved<AskedQuestion>[]>([]);
