@@ -33,6 +33,7 @@ import {
   recentSentences,
   splitSentences,
 } from '@/voice/geminiInterpreter';
+import { answerQuestion, resumePoint } from '@/ai/askDodo';
 import { isNarratorEcho } from '@/voice/narratorEcho';
 import { isBareHighlight, parseCommand, type Command } from '@/voice/parseCommand';
 import { useWakeWord } from '@/voice/useWakeWord';
@@ -47,6 +48,8 @@ const DOCK_DROP = 40;
 // Scroll movement smaller than this doesn't change the controls' position.
 const SCROLL_JITTER = 8;
 const DOCK_SPRING = { damping: 22, stiffness: 220, reduceMotion: ReduceMotion.System };
+// Answer text stays in the status line this long.
+const ANSWER_DISPLAY_MS = 12_000;
 // With no touches for this long, only the play button stays on screen.
 const IDLE_HIDE_MS = 3000;
 const FADE = { duration: 220, reduceMotion: ReduceMotion.System };
@@ -117,15 +120,20 @@ function Reader({ book }: { book: Book }) {
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where narration resumes after an answer: the sentence being read when the
+  // listener said "Hey DODO" or tapped the mic.
+  const resumeFrom = useRef<number | null>(null);
+  // Bumped per question so a slow answer can't play over a newer one.
+  const askSession = useRef(0);
 
   // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
   const buzzWake = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   const buzzDone = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-  const say = (message: string) => {
+  const say = (message: string, ms = 2500) => {
     setFeedback(message);
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => setFeedback(''), 2500);
+    feedbackTimer.current = setTimeout(() => setFeedback(''), ms);
   };
 
   const paragraphOf = (idx: number) =>
@@ -313,6 +321,9 @@ function Reader({ book }: { book: Book }) {
       case 'unknown':
         say(`Didn't catch that: “${command.heard}”`);
         return false;
+      case 'question':
+        say('Add EXPO_PUBLIC_GEMINI_API_KEY to ask questions');
+        return false;
     }
     return true;
   };
@@ -321,6 +332,40 @@ function Reader({ book }: { book: Book }) {
   // recent sentences and decides exactly what to save. Narration resumes right
   // away; the result lands when Gemini answers. Falls back to the simple rules
   // (sentence just read, note at current word) if the request fails.
+  // Ask DODO: Gemini answers from the book so far; the answer is saved, shown,
+  // and spoken over the ducked narrator, which then resumes where they asked.
+  const ask = (question: string) => {
+    const mySession = ++askSession.current;
+    const idx = narration.currentIdxRef.current;
+    const resume = resumeFrom.current ?? resumePoint(sentences, idx);
+    narration.duck();
+    setFeedback('Thinking…');
+
+    answerQuestion(question, book, idx)
+      .then(({ answer, title }) => {
+        if (askSession.current !== mySession) return;
+        library.addAskedQuestion({
+          bookId: book.id,
+          wordIdx: idx,
+          question,
+          answer,
+          title,
+          askedAt: new Date().toISOString(),
+        });
+        buzzDone();
+        say(answer, ANSWER_DISPLAY_MS);
+        narration
+          .speakAside(answer, resume)
+          .catch((error) => console.log('[dodo] Answer audio failed:', String(error)));
+      })
+      .catch((error) => {
+        if (askSession.current !== mySession) return;
+        console.log('[dodo] Ask DODO failed:', String(error));
+        narration.unduck();
+        say("Couldn't answer that right now");
+      });
+  };
+
   const understand = (text: string, command: Command) => {
     const idx = narration.currentIdxRef.current;
     const context = recentSentences(sentences, idx);
@@ -336,6 +381,8 @@ function Reader({ book }: { book: Book }) {
           library.addNote({ bookId: book.id, wordIdx: result.wordIdx, content: result.content });
           say(result.reply);
           buzzDone();
+        } else if (result.action === 'answer') {
+          ask(text);
         } else {
           say(result.reply);
         }
@@ -367,11 +414,20 @@ function Reader({ book }: { book: Book }) {
   const voice = useWakeWord({
     onWake: () => {
       buzzWake();
+      // A new "Hey DODO" interrupts an answer (the narrator rewinds first).
+      askSession.current++;
+      if (narration.isSpeakingAside) narration.stopAside();
+      resumeFrom.current = resumePoint(sentences, narration.currentIdxRef.current);
       narration.duck();
     },
     onCommand: (text) => {
-      narration.unduck();
       const command = parseCommand(text);
+      // Questions keep the book ducked through the answer.
+      if (command.type === 'question' && isGeminiConfigured()) {
+        ask(command.text);
+        return;
+      }
+      narration.unduck();
       // "Highlight that" is done here right away; describing what to
       // highlight ("the part about…"), notes, and anything else go to Gemini.
       const needsUnderstanding =
@@ -425,7 +481,8 @@ function Reader({ book }: { book: Book }) {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
   }, []);
-  const showSideButtons = touchedRecently || voice.status === 'awake' || selected !== null;
+  const showSideButtons =
+    touchedRecently || voice.status === 'awake' || narration.isSpeakingAside || selected !== null;
   const dockStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
   }));
@@ -462,6 +519,14 @@ function Reader({ book }: { book: Book }) {
   // Command feedback first, then narration problems, then the mic's state.
   const message = feedback || narration.error;
 
+
+  // Mic: idle → listen; listening → end the turn; answering → stop the answer.
+  const onMicPress = () => {
+    if (narration.isSpeakingAside) narration.stopAside();
+    else if (voice.status === 'awake') voice.endTurn();
+    else if (voice.status === 'error') voice.retry();
+    else voice.wake();
+  };
   return (
     <SafeAreaView style={styles.screen} edges={['top']} onTouchStart={onTouch}>
       <Text style={styles.bookTitle} numberOfLines={1}>
@@ -555,7 +620,11 @@ function Reader({ book }: { book: Book }) {
           <Pressable
             style={styles.playButton}
             accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
-            onPress={() => (narration.isPlaying ? narration.pause() : narration.play())}>
+            onPress={() => {
+              if (narration.isSpeakingAside) narration.stopAside();
+              else if (narration.isPlaying) narration.pause();
+              else narration.play();
+            }}>
             <SymbolView
               name={
                 narration.isPlaying
@@ -581,7 +650,8 @@ function Reader({ book }: { book: Book }) {
             <ActionButton
               icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
               state="idle"
-              onPress={voice.status === 'error' ? voice.retry : voice.wake}
+              onPress={onMicPress}
+              active={voice.status === 'awake' || narration.isSpeakingAside}
               accessibilityLabel="Give DODO a voice command"
             />
           </IdleFade>
