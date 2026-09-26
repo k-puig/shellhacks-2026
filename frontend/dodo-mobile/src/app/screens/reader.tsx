@@ -17,6 +17,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
@@ -46,6 +47,22 @@ const DOCK_DROP = 40;
 // Scroll movement smaller than this doesn't change the controls' position.
 const SCROLL_JITTER = 8;
 const DOCK_SPRING = { damping: 22, stiffness: 220, reduceMotion: ReduceMotion.System };
+// With no touches for this long, only the play button stays on screen.
+const IDLE_HIDE_MS = 3000;
+const FADE = { duration: 220, reduceMotion: ReduceMotion.System };
+
+// A dock button that fades and shrinks away while the reader is idle.
+function IdleFade({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: withTiming(visible ? 1 : 0, FADE),
+    transform: [{ scale: withTiming(visible ? 1 : 0.85, FADE) }],
+  }));
+  return (
+    <Animated.View style={[styles.sideButton, style]} pointerEvents={visible ? 'auto' : 'none'}>
+      {children}
+    </Animated.View>
+  );
+}
 
 // Book text uses a serif; Georgia ships with iOS, "serif" maps to Noto Serif on Android.
 const READING_FONT = Platform.select({ ios: 'Georgia', default: 'serif' });
@@ -376,20 +393,57 @@ function Reader({ book }: { book: Book }) {
   // Keep the paragraph being read on screen, hands-free.
   const scroll = useRef<Animated.ScrollView>(null);
 
-  // Controls drop on scroll down and come back on scroll up, like the tab bar.
+  // Controls drop on scroll down and stay down until the tab bar comes back:
+  // when the user scrolls up, or reaches the top. Narration's own scrolling
+  // and the bounce at the end of the book never bring them up.
   const lastScrollY = useSharedValue(0);
   const dockDown = useSharedValue(0);
+  const userScrolling = useSharedValue(false);
   const onScroll = useAnimatedScrollHandler({
+    onBeginDrag: () => {
+      userScrolling.value = true;
+    },
+    onEndDrag: () => {
+      userScrolling.value = false;
+    },
+    onMomentumBegin: () => {
+      userScrolling.value = true;
+    },
+    onMomentumEnd: () => {
+      userScrolling.value = false;
+    },
     onScroll: (e) => {
       const y = e.contentOffset.y;
+      if (y <= 0) {
+        dockDown.value = 0;
+        lastScrollY.value = 0;
+        return;
+      }
+      if (y >= e.contentSize.height - e.layoutMeasurement.height) return;
       const dy = y - lastScrollY.value;
-      if (y <= 0) dockDown.value = 0;
-      else if (dy > SCROLL_JITTER) dockDown.value = 1;
-      else if (dy < -SCROLL_JITTER) dockDown.value = 0;
-      else return;
+      if (Math.abs(dy) <= SCROLL_JITTER) return;
+      if (dy > 0) dockDown.value = 1;
+      else if (userScrolling.value) dockDown.value = 0;
       lastScrollY.value = y;
     },
   });
+
+  // Highlight, mic and note hide after a few seconds without a touch; play
+  // stays. They stay up while DODO is listening or something is selected.
+  const [touchedRecently, setTouchedRecently] = useState(true);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onTouch = () => {
+    setTouchedRecently(true);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setTouchedRecently(false), IDLE_HIDE_MS);
+  };
+  useEffect(() => {
+    idleTimer.current = setTimeout(() => setTouchedRecently(false), IDLE_HIDE_MS);
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+  }, []);
+  const showSideButtons = touchedRecently || voice.status === 'awake' || selected !== null;
   const dockStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
   }));
@@ -427,7 +481,7 @@ function Reader({ book }: { book: Book }) {
   const message = feedback || narration.error;
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={['top']} onTouchStart={onTouch}>
       <Text style={styles.bookTitle} numberOfLines={1}>
         {book.title}
       </Text>
@@ -531,33 +585,33 @@ function Reader({ book }: { book: Book }) {
             />
           </Pressable>
 
-          <View style={styles.sideButton}>
+          <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
               state={buttonState('highlight', highlightTarget)}
               onPress={onHighlightButton}
               accessibilityLabel="Highlight the sentence just read"
             />
-          </View>
+          </IdleFade>
 
           {/* Same as saying "Hey DODO", for when the room is too loud. */}
-          <View style={styles.sideButton}>
+          <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
               state="idle"
               onPress={voice.status === 'error' ? voice.retry : voice.wake}
               accessibilityLabel="Give DODO a voice command"
             />
-          </View>
+          </IdleFade>
 
-          <View style={styles.sideButton}>
+          <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' }}
               state={buttonState('note', noteTarget)}
               onPress={onNoteButton}
               accessibilityLabel="Write a note here"
             />
-          </View>
+          </IdleFade>
         </View>
       </Animated.View>
 
