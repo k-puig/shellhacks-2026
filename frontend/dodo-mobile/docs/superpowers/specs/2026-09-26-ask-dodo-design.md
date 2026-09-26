@@ -166,7 +166,9 @@ answerQuestion(question: string, book: Book, currentIdx: number):
 - `parseAnswer`: rejects empty answers, falls back to a title from the question.
 - `groupQuestionsByBook`: ordering, newest first within a book, chapter and
   passage.
-- `endTurn` decision (submit vs cancel) as a pure helper.
+- `endTurn` reuses the existing `finish(command)`, which already submits a
+  non-empty command and cancels an empty one; it's verified on the phone
+  (items 5 and 6) rather than with a new unit test.
 - The resume point: the start of the sentence containing the word being read
   at the wake word, including the first sentence of a paragraph.
 
