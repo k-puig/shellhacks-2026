@@ -13,8 +13,8 @@
     "jsr:@std/net@^1.0.6": "1.0.7",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "jsr:@std/streams@^1.1.0": "1.2.0",
+    "jsr:@zod/zod@^4.6.5": "4.6.5",
     "npm:@auth0/auth0-hono@^1.2.6": "1.2.6_hono@4.13.9",
-    "npm:@auth0/auth0-react@^2.27.0": "2.27.0_react@19.3.0_react-dom@19.3.0",
     "npm:@aws-sdk/client-s3@^3.1140.0": "3.1140.0",
     "npm:@deno/vite-plugin@^2.0.2": "2.0.3_vite@8.3.1",
     "npm:@mikro-orm/core@^7.2.1": "7.2.1",
@@ -22,6 +22,7 @@
     "npm:@mikro-orm/mongodb@^7.2.1": "7.2.1_@mikro-orm+core@7.2.1",
     "npm:@mikro-orm/postgresql@^7.2.1": "7.2.1_@mikro-orm+core@7.2.1",
     "npm:@tanstack/cli@latest": "0.71.0",
+    "npm:@tanstack/react-query@^5.103.2": "5.103.2_react@19.3.0",
     "npm:@types/react-dom@^19.2.7": "19.3.0_@types+react@19.3.0",
     "npm:@types/react@^19.2.18": "19.3.0",
     "npm:@vitejs/plugin-react@^6.1.1": "6.1.1_vite@8.3.1",
@@ -33,7 +34,8 @@
     "npm:reflect-metadata@~0.2.2": "0.2.2",
     "npm:uuid@^14.0.2": "14.0.2",
     "npm:vite@*": "8.3.1",
-    "npm:vite@^8.2.2": "8.3.1"
+    "npm:vite@^8.2.2": "8.3.1",
+    "npm:zod@^4.6.5": "4.6.5"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -88,6 +90,9 @@
     },
     "@std/streams@1.2.0": {
       "integrity": "256b934254778f2bf45f5713b934209ff29e9b4b7fd4ec095219966813758c5f"
+    },
+    "@zod/zod@4.6.5": {
+      "integrity": "de9ee54513b84efecbdf2988f5a01eca0e2883be4b5625cf320bc0d6dbbade3e"
     }
   },
   "npm": {
@@ -103,15 +108,7 @@
       "dependencies": [
         "@auth0/auth0-server-js",
         "hono",
-        "zod"
-      ]
-    },
-    "@auth0/auth0-react@2.27.0_react@19.3.0_react-dom@19.3.0": {
-      "integrity": "sha512-SVDiQM1Eatv+zLzy7qyxMdcETdbGVOqXR+zaBXbMyX32xUzTNIppgcHFoD0AFLqVQrBZgTHX4ujj9D9+sfCXsQ==",
-      "dependencies": [
-        "@auth0/auth0-spa-js",
-        "react",
-        "react-dom"
+        "zod@3.25.76"
       ]
     },
     "@auth0/auth0-server-js@1.15.0": {
@@ -119,15 +116,6 @@
       "dependencies": [
         "@auth0/auth0-auth-js",
         "jose"
-      ]
-    },
-    "@auth0/auth0-spa-js@2.27.0": {
-      "integrity": "sha512-E9U4v9IiowT+z26PQYT55ZAU5J1feyEV9umVX+lvnaHl43E3GvGVsTrfukhPLLWnoCRItWa2TxVQ3Svj1S4qyA==",
-      "dependencies": [
-        "@auth0/auth0-auth-js",
-        "browser-tabs-lock",
-        "dpop",
-        "es-cookie"
       ]
     },
     "@aws-sdk/checksums@3.1001.1": {
@@ -588,7 +576,7 @@
         "semver",
         "tempy",
         "validate-npm-package-name",
-        "zod"
+        "zod@3.25.76"
       ],
       "bin": true
     },
@@ -601,7 +589,17 @@
         "parse-gitignore",
         "prettier",
         "rimraf",
-        "zod"
+        "zod@3.25.76"
+      ]
+    },
+    "@tanstack/query-core@5.103.2": {
+      "integrity": "sha512-I8DkFXls5jXLqtm8+QpOhEmG07hIblhSZFzafg9wHsMSEvMzULy9hK17wU1T/ahfhMbtITJhbxutwwCoihkR7A=="
+    },
+    "@tanstack/react-query@5.103.2_react@19.3.0": {
+      "integrity": "sha512-B+fWiYZBc+0uUD5zDZAeLw9dKj7XEsdnuu6zRZ+no6LNKpeE3P3bJ+N6HINjcIlWR6fW3vUoTneEaGa2V6ehqw==",
+      "dependencies": [
+        "@tanstack/query-core",
+        "react"
       ]
     },
     "@types/react-dom@19.3.0_@types+react@19.3.0": {
@@ -672,13 +670,6 @@
         "fill-range"
       ]
     },
-    "browser-tabs-lock@1.3.0": {
-      "integrity": "sha512-g6nHaobTiT0eMZ7jh16YpD2kcjAp+PInbiVq3M1x6KKaEIVhT4v9oURNIpZLOZ3LQbQ3XYfNhMAb/9hzNLIWrw==",
-      "dependencies": [
-        "lodash"
-      ],
-      "scripts": true
-    },
     "bson@7.3.3": {
       "integrity": "sha512-oz3LwE3qGEhTCSyhzQRLY3Bj1NLOsjFMf6tcmY5J8M+3R7EVcmoBfSHWvjUK3yXCLDUsGpIuB3aQL4nDZ1EV/g=="
     },
@@ -739,18 +730,12 @@
     "diff@7.0.0": {
       "integrity": "sha512-PJWHUb1RFevKCwaFA9RlG5tCd+FO5iRh9A8HEtkmBH2Li03iJriB6m6JIN4rGz3K3JLawI7/veA1xzRKP6ISBw=="
     },
-    "dpop@2.1.2": {
-      "integrity": "sha512-hN3XjjCcgYWmNL8DFAV1Z3alXIvLolvjis189NI/U4k4Iu/m4rBeUYObbIjnRzQYDQv4zMaXXskjVDqSkmyh7Q=="
-    },
     "ejs@3.1.10": {
       "integrity": "sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==",
       "dependencies": [
         "jake"
       ],
       "bin": true
-    },
-    "es-cookie@1.3.2": {
-      "integrity": "sha512-UTlYYhXGLOy05P/vKVT2Ui7WtC7NiRzGtJyAKKn32g5Gvcjn7KAClLPWlipCtxIus934dFg9o9jXiBL0nP+t9Q=="
     },
     "execa@9.6.1": {
       "integrity": "sha512-9Be3ZoN4LmYR90tUoVu2te2BsbzHfhJyfEiAVfz7N5/zv+jduIfLrV2xdQXOHbaD6KgpGdO9PRPM1Y4Q9QkPkA==",
@@ -967,9 +952,6 @@
         "lightningcss-win32-arm64-msvc",
         "lightningcss-win32-x64-msvc"
       ]
-    },
-    "lodash@4.18.1": {
-      "integrity": "sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q=="
     },
     "lru-cache@11.5.2": {
       "integrity": "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="
@@ -1347,6 +1329,9 @@
     },
     "zod@3.25.76": {
       "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
+    },
+    "zod@4.6.5": {
+      "integrity": "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q=="
     }
   },
   "workspace": {
@@ -1359,20 +1344,23 @@
     "members": {
       "app/protoweb": {
         "dependencies": [
-          "npm:@auth0/auth0-react@^2.27.0",
           "npm:@deno/vite-plugin@^2.0.2",
+          "npm:@tanstack/react-query@^5.103.2",
           "npm:@types/react-dom@^19.2.7",
           "npm:@types/react@^19.2.18",
           "npm:@vitejs/plugin-react@^6.1.1",
           "npm:react-dom@^19.2.8",
           "npm:react@^19.2.8",
-          "npm:vite@^8.2.2"
+          "npm:vite@^8.2.2",
+          "npm:zod@^4.6.5"
         ]
       },
       "app/rest": {
         "dependencies": [
+          "jsr:@zod/zod@^4.6.5",
           "npm:@auth0/auth0-hono@^1.2.6",
-          "npm:hono@^4.13.9"
+          "npm:hono@^4.13.9",
+          "npm:uuid@^14.0.2"
         ]
       },
       "package/database": {

@@ -2,7 +2,9 @@
   "imports": {
     "@auth0/auth0-hono": "npm:@auth0/auth0-hono@^1.2.6",
     "@package/": "../../package/",
-    "hono": "npm:hono@^4.13.9"
+    "@zod/zod": "jsr:@zod/zod@^4.6.5",
+    "hono": "npm:hono@^4.13.9",
+    "uuid": "npm:uuid@^14.0.2"
   },
   "tasks": {
     "start": "deno run --allow-net --allow-env main.ts"

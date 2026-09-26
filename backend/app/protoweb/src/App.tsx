@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useAuth0 } from "@auth0/auth0-react";
+import { useQuery } from "@tanstack/react-query";
+import { getCurrentUserInfo } from "@app/protoweb/src/client/user.ts";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "./assets/vite.svg";
 import heroImg from "./assets/hero.png";
@@ -7,28 +8,27 @@ import "./App.css";
 
 function App() {
   const [count, setCount] = useState(0);
-  const { isAuthenticated, isLoading, user, loginWithRedirect, logout } =
-    useAuth0();
+  const { isPending, data } = useQuery({
+    queryKey: ["userinfotest"],
+    queryFn: getCurrentUserInfo,
+    retry: (failureCount, error) =>
+      !(error instanceof Response && error.status === 401) && failureCount < 3,
+  });
 
   return (
     <>
       <section id="center">
         <div className="auth-controls" role="group" aria-label="Account">
-          {isLoading
-            ? <p role="status">Checking sign-in…</p>
-            : isAuthenticated
+          {isPending ? <p role="status">Checking sign-in…</p> : data
             ? (
               <>
-                <span>
-                  Signed in as {user?.name ?? user?.email ?? "your account"}
-                </span>
+                <span>Signed in as {data.username}</span>
                 <button
                   className="auth-button"
                   type="button"
-                  onClick={() =>
-                    logout({
-                      logoutParams: { returnTo: globalThis.location.origin },
-                    })}
+                  onClick={() => {
+                    globalThis.location.assign("/api/v1/user/logout");
+                  }}
                 >
                   Log out
                 </button>
@@ -38,7 +38,9 @@ function App() {
               <button
                 className="auth-button"
                 type="button"
-                onClick={() => loginWithRedirect()}
+                onClick={() => {
+                  globalThis.location.assign("/api/v1/user/login");
+                }}
               >
                 Log in
               </button>

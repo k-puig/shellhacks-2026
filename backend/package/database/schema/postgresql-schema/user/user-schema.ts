@@ -6,6 +6,6 @@ export class UserSchema extends BaseSchema {
   @Property({ type: "string" })
   username!: string;
 
-  @Property({ type: "string" })
+  @Property({ type: "string", unique: true })
   authId!: string;
 }
