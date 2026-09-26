@@ -36,6 +36,14 @@ export function useNarration(book: Book) {
   });
   const status = useAudioPlayerStatus(player);
 
+  // Second player for DODO's spoken answers, over the ducked narrator.
+  const aside = useAudioPlayer(null, { keepAudioSessionActive: true });
+  const [isSpeakingAside, setSpeakingAside] = useState(false);
+  // Bumped when an answer starts or stops, so a late audio fetch is dropped.
+  const asideSession = useRef(0);
+  // Where the narrator picks back up when the answer ends.
+  const resumeAfterAside = useRef<number | null>(null);
+
   // Bumped on every play/pause so results for an abandoned request are ignored.
   const session = useRef(0);
   const currentIdxRef = useRef(0);
@@ -167,6 +175,45 @@ export function useNarration(book: Book) {
     player.volume = 1;
   };
 
+  // Ends the answer: book back to full volume, rewound to where the listener
+  // asked if it was playing.
+  const stopAside = () => {
+    asideSession.current++;
+    aside.pause();
+    setSpeakingAside(false);
+    unduck();
+    const resume = resumeAfterAside.current;
+    resumeAfterAside.current = null;
+    if (resume !== null && playingRef.current) play(resume);
+  };
+
+  // Speaks DODO's answer over the ducked narrator.
+  const speakAside = async (text: string, resumeFromIdx: number) => {
+    const mySession = ++asideSession.current;
+    resumeAfterAside.current = resumeFromIdx;
+    duck();
+    setSpeakingAside(true);
+    try {
+      const audio = await synthesize(text);
+      if (asideSession.current !== mySession) return;
+      aside.replace({ uri: audio.fileUri });
+      aside.play();
+    } catch (e) {
+      if (asideSession.current === mySession) stopAside();
+      throw e;
+    }
+  };
+
+  // The answer played to the end.
+  const stopAsideRef = useRef(stopAside);
+  useEffect(() => {
+    stopAsideRef.current = stopAside;
+  });
+  useEffect(() => {
+    const sub = onFinish(aside, () => stopAsideRef.current());
+    return () => sub.remove();
+  }, [aside]);
+
   const changeRate = (delta: number) => {
     const next = Math.min(2, Math.max(0.5, Math.round((rateRef.current + delta) * 10) / 10));
     rateRef.current = next;
@@ -195,5 +242,8 @@ export function useNarration(book: Book) {
     changeRate,
     duck,
     unduck,
+    speakAside,
+    stopAside,
+    isSpeakingAside,
   };
 }
