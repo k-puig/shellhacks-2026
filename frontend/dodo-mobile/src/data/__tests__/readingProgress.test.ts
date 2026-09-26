@@ -5,6 +5,7 @@ import {
   nextChapterStart,
   parsePositions,
   previousChapterTarget,
+  withoutBook,
   withPosition,
 } from '../readingProgress';
 
@@ -111,5 +112,12 @@ describe('parsePositions', () => {
     expect(parsePositions('{"a":{"lastIdx":"x"},"b":{"lastIdx":1,"furthestIdx":2}}')).toEqual({
       b: { lastIdx: 1, furthestIdx: 2 },
     });
+  });
+});
+
+describe('withoutBook', () => {
+  it('forgets one book and keeps the others', () => {
+    const positions = { a: { lastIdx: 1, furthestIdx: 5 }, b: { lastIdx: 2, furthestIdx: 2 } };
+    expect(withoutBook(positions, 'a')).toEqual({ b: { lastIdx: 2, furthestIdx: 2 } });
   });
 });

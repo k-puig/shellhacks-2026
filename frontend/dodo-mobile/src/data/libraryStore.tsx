@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 
 import { mockBooks, type AskedQuestion, type Highlight, type Note } from './mockBooks';
 import { loadPositions, savePositions } from './progressFile';
-import { withPosition, type Positions } from './readingProgress';
+import { withoutBook, withPosition, type Positions } from './readingProgress';
 
 type Saved<T> = T & { bookId: string };
 
@@ -24,6 +24,7 @@ type LibraryState = {
   // False until saved positions have been read at launch.
   positionsLoaded: boolean;
   setPosition: (bookId: string, idx: number) => void;
+  clearPosition: (bookId: string) => void;
 };
 
 const LibraryContext = createContext<LibraryState | null>(null);
@@ -70,6 +71,7 @@ export function LibraryProvider({ children }: PropsWithChildren) {
         positionsLoaded,
         setPosition: (bookId, idx) =>
           setPositions((all) => ({ ...all, [bookId]: withPosition(all[bookId], idx) })),
+        clearPosition: (bookId) => setPositions((all) => withoutBook(all, bookId)),
       }}>
       {children}
     </LibraryContext.Provider>

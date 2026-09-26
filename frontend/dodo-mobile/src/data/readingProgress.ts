@@ -52,6 +52,11 @@ export function nextChapterStart(book: Book, idx: number): number | null {
   return next ? firstIdx(next) : null;
 }
 
+// Forgets one book's progress.
+export function withoutBook(positions: Positions, bookId: string): Positions {
+  return Object.fromEntries(Object.entries(positions).filter(([id]) => id !== bookId));
+}
+
 export function withPosition(current: Position | undefined, idx: number): Position {
   return { lastIdx: idx, furthestIdx: Math.max(current?.furthestIdx ?? -1, idx) };
 }

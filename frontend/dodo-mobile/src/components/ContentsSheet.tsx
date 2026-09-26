@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Book } from '@/data/mockBooks';
 import {
@@ -29,6 +29,7 @@ export function ContentsSheet({
   position,
   onSelect,
   onClose,
+  onReset,
 }: {
   visible: boolean;
   book: Book;
@@ -36,6 +37,8 @@ export function ContentsSheet({
   // Called with the word to continue from.
   onSelect: (idx: number) => void;
   onClose: () => void;
+  // Forget this book's progress and start over.
+  onReset: () => void;
 }) {
   const furthest = position?.furthestIdx ?? -1;
   const perChapter = chapterProgress(book, furthest);
@@ -104,6 +107,20 @@ export function ContentsSheet({
               </Pressable>
             );
           })}
+
+          {position && (
+            <Pressable
+              style={styles.reset}
+              accessibilityRole="button"
+              onPress={() =>
+                Alert.alert('Reset progress?', `Start ${book.title} over from the beginning.`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Reset', style: 'destructive', onPress: onReset },
+                ])
+              }>
+              <Text style={styles.resetText}>Reset progress</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -153,6 +170,8 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, gap: 6, paddingRight: 10 },
   rowTitle: { color: colors.text, fontSize: 16 },
   rowTitleCurrent: { color: colors.accent, fontWeight: '600' },
+  reset: { alignSelf: 'center', marginTop: 24, padding: 12 },
+  resetText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
   track: { height: 3, borderRadius: 2, backgroundColor: colors.border },
   fill: { height: 3, borderRadius: 2, backgroundColor: colors.accent },
 });

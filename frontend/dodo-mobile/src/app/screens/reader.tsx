@@ -719,7 +719,13 @@ function Reader({ book }: { book: Book }) {
   }, [library.positionsLoaded]);
 
   // Save the spot as each paragraph starts and whenever narration pauses.
+  // Skipped once after a reset, so moving back to the start isn't saved as progress.
+  const skipNextSave = useRef(false);
   useEffect(() => {
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
     if (restored.current) library.setPosition(book.id, narration.currentIdxRef.current);
     // library.setPosition only updates state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -914,6 +920,13 @@ function Reader({ book }: { book: Book }) {
         onSelect={(idx) => {
           setShowContents(false);
           narration.seek(idx, narration.isPlaying);
+        }}
+        onReset={() => {
+          setShowContents(false);
+          skipNextSave.current = true;
+          narration.pause();
+          narration.seek(book.chapters[0].paragraphs[0].words[0].idx, false);
+          library.clearPosition(book.id);
         }}
       />
 
