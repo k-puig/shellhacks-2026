@@ -1,9 +1,16 @@
-import { Hono } from 'hono'
+import { Hono } from "hono";
+import { dummy } from "./dummy/router.ts";
+import { user } from "./user/router.ts";
 
-const app = new Hono()
+const api = new Hono();
 
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
+api.get("/", (c) => {
+  return c.text("Hello Hono!");
+});
+api.route("/dummy", dummy);
+api.route("/user", user);
 
-Deno.serve(app.fetch)
+const app = new Hono();
+app.route("/api/v1", api);
+
+Deno.serve(app.fetch);
