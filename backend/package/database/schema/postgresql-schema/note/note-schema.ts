@@ -1,7 +1,7 @@
 import type { Ref } from "@mikro-orm/core";
 import { Entity, OneToOne, Property } from "@mikro-orm/decorators/legacy";
-import { BaseSchema } from "@package/database/schema/base-schema.ts";
-import { HighlightSchema } from "@package/database/schema/highlight/highlight-schema.ts";
+import { BaseSchema } from "@package/database/schema/postgresql-schema/base-schema.ts";
+import { HighlightSchema } from "@package/database/schema/postgresql-schema/highlight/highlight-schema.ts";
 
 @Entity({ tableName: "note" })
 export class NoteSchema extends BaseSchema {

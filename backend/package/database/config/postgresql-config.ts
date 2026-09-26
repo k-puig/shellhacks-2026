@@ -5,7 +5,7 @@ import {
   LibrarySchema,
   NoteSchema,
   UserSchema,
-} from "@package/database/schema/index.ts";
+} from "@package/database/schema/postgresql-schema/index.ts";
 
 export async function connectDatabase() {
   return await MikroORM.init({

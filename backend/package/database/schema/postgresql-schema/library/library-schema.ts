@@ -1,5 +1,5 @@
 import { Entity, Property } from "@mikro-orm/decorators/legacy";
-import { BaseSchema } from "@package/database/schema/base-schema.ts";
+import { BaseSchema } from "@package/database/schema/postgresql-schema/base-schema.ts";
 
 @Entity({ tableName: "library" })
 export class LibrarySchema extends BaseSchema {
