@@ -1,4 +1,5 @@
 {
+  "name": "@dodo/rest",
   "imports": {
     "hono": "jsr:@hono/hono@^4.13.8"
   },

@@ -1,4 +1,9 @@
 {
+  "name": "@dodo/backend",
+  "workspace": ["./app/rest", "./package/database", "./package/s3"],
+  "lock": {
+    "path": "./deno.lock"
+  },
   "tasks": {
     "dev": "deno run --watch --allow-net main.ts"
   },

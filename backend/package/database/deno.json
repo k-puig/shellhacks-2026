@@ -1,4 +1,5 @@
 {
+  "name": "@dodo/database",
   "tasks": {
     "dev": "deno run --watch --allow-net main.ts"
   },
