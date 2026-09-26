@@ -2,7 +2,7 @@ import { MikroORM } from "@mikro-orm/mongodb";
 
 export async function connectMongoDatabase() {
   return await MikroORM.init({
-    entities: [],
+    entities: [/*TODO: add entities when sidecar is done*/],
     host: Deno.env.get("MONGODB_HOST") ?? "127.0.0.1",
     port: Number(Deno.env.get("MONGODB_PORT") ?? "27017"),
     dbName: Deno.env.get("MONGODB_DATABASE"),
