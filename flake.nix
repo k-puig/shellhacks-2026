@@ -25,7 +25,14 @@
               ++ [
                 deno
                 nodejs_26
-                python314
+
+                (python314.withPackages (
+                  python-pkgs: with python-pkgs; [
+                    fastapi
+                    kokoro
+                    ebooklib
+                  ]
+                ))
 
                 nil
                 nixd
