@@ -48,6 +48,10 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failures = useRef(0);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The native module can emit several "end" events for one session, and each
+  // native start() rebuilds the audio engine and re-activates the session,
+  // which cuts out the narrator. So only ever keep one restart pending.
+  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // iOS won't let us record in the background, so we stop while backgrounded
   // (screen locked, app switched) and start fresh when the app is active again.
   const foreground = useRef(AppState.currentState === 'active');
@@ -89,6 +93,14 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
 
   // Ends the current recognition session; the "end" handler restarts it with a
   // fresh transcript.
+  const scheduleStart = (delayMs: number) => {
+    if (restartTimer.current) clearTimeout(restartTimer.current);
+    restartTimer.current = setTimeout(() => {
+      restartTimer.current = null;
+      start();
+    }, delayMs);
+  };
+
   const reset = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
@@ -116,7 +128,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
 
   useSpeechRecognitionEvent('end', () => {
     // Restart right away normally; back off while it keeps failing.
-    if (enabled.current && foreground.current) setTimeout(start, 250 * 2 ** failures.current);
+    if (enabled.current && foreground.current) scheduleStart(250 * 2 ** failures.current);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
@@ -196,7 +208,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
       // Abort any half-dead session first; its "end" restarts us, and start()
       // below covers the case where nothing was running.
       ExpoSpeechRecognitionModule.abort();
-      setTimeout(start, 300);
+      scheduleStart(300);
     });
   };
 
@@ -209,6 +221,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
   const stopForBackground = () => {
     if (timer.current) clearTimeout(timer.current);
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    if (restartTimer.current) clearTimeout(restartTimer.current);
     // Drop a half-spoken command rather than acting on it later.
     if (awake.current) handlers.current.onCancel();
     awake.current = false;
@@ -231,6 +244,7 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
       enabled.current = false;
       if (timer.current) clearTimeout(timer.current);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (restartTimer.current) clearTimeout(restartTimer.current);
       ExpoSpeechRecognitionModule.abort();
     };
     // Mount-only: begin/startFresh/stopForBackground only touch refs and setters.
