@@ -65,3 +65,21 @@ describe('questions', () => {
     expect(parseCommand(text).type).toBe(type);
   });
 });
+
+describe('chapter recap questions', () => {
+  it.each([
+    'what happened in the last chapter',
+    'remind me what happened in the previous chapter',
+    'can you recap the last chapter',
+  ])('answers "%s" instead of changing chapter', (text) => {
+    expect(parseCommand(text)).toEqual({ type: 'question', text });
+  });
+
+  it.each([
+    ['next chapter', 'nextChapter'],
+    ['go to the previous chapter', 'previousChapter'],
+    ["what's the next chapter", 'nextChapter'],
+  ])('still navigates on "%s"', (text, type) => {
+    expect(parseCommand(text).type).toBe(type);
+  });
+});

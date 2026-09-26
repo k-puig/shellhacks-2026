@@ -175,16 +175,16 @@ export function useNarration(book: Book) {
     player.volume = 1;
   };
 
-  // Ends the answer: book back to full volume, rewound to where the listener
-  // asked if it was playing.
-  const stopAside = () => {
+  // Ends the answer: book back to full volume and, with `resume`, rewound to
+  // where the listener asked if it was playing.
+  const stopAside = (resume = true) => {
     asideSession.current++;
     aside.pause();
     setSpeakingAside(false);
     unduck();
-    const resume = resumeAfterAside.current;
+    const resumeIdx = resumeAfterAside.current;
     resumeAfterAside.current = null;
-    if (resume !== null && playingRef.current) play(resume);
+    if (resume && resumeIdx !== null && playingRef.current) play(resumeIdx);
   };
 
   // Speaks DODO's answer over the ducked narrator.

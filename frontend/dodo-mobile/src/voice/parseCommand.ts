@@ -22,6 +22,9 @@ const NOTE_PREFIX =
 const QUESTION =
   /^(?:(?:why|who|whom|whose|what|when|where|which|how|is|are|was|were|does|do|did)\b|explain\b|tell me\b|remind me\b|(?:can|could) you (?:explain|tell)\b)/;
 
+// "What happened in the last chapter?" is a question, not chapter navigation.
+const RECAP = /\bhappen(?:ed|s)?\b|\bremind me\b|\brecap\b|\bsummar/;
+
 // Turns the words spoken after "Hey DODO" into an action.
 export function parseCommand(raw: string): Command {
   const text = raw.toLowerCase().replace(/[.,!?]/g, '').trim();
@@ -37,9 +40,13 @@ export function parseCommand(raw: string): Command {
     const color = HIGHLIGHT_COLOR_NAMES.find((c) => new RegExp(`\\b${c}\\b`).test(text));
     return color ? { type: 'highlight', color } : { type: 'highlight' };
   }
-  if (/\bnext chapter\b/.test(text)) return { type: 'nextChapter' };
-  if (/\b(?:previous|last) chapter\b/.test(text)) return { type: 'previousChapter' };
-  if (QUESTION.test(text) || raw.trim().endsWith('?')) return { type: 'question', text: raw.trim() };
+  if (!RECAP.test(text)) {
+    if (/\bnext chapter\b/.test(text)) return { type: 'nextChapter' };
+    if (/\b(?:previous|last) chapter\b/.test(text)) return { type: 'previousChapter' };
+  }
+  if (QUESTION.test(text) || RECAP.test(text) || raw.trim().endsWith('?')) {
+    return { type: 'question', text: raw.trim() };
+  }
   if (/\b(?:pause|stop|hold on|wait)\b/.test(text)) return { type: 'pause' };
   if (/\b(?:play|resume|continue|keep (?:going|reading)|go on)\b/.test(text)) return { type: 'play' };
   if (/\b(?:repeat|go back|rewind|again)\b/.test(text)) return { type: 'repeat' };

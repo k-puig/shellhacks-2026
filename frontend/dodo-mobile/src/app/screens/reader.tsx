@@ -125,6 +125,8 @@ function Reader({ book }: { book: Book }) {
   const resumeFrom = useRef<number | null>(null);
   // Bumped per question so a slow answer can't play over a newer one.
   const askSession = useRef(0);
+  // The answer being spoken, so the mic ignores DODO's own voice too.
+  const answerEcho = useRef('');
 
   // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
   const buzzWake = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -353,6 +355,7 @@ function Reader({ book }: { book: Book }) {
           askedAt: new Date().toISOString(),
         });
         buzzDone();
+        answerEcho.current = answer;
         say(answer, ANSWER_DISPLAY_MS);
         narration
           .speakAside(answer, resume)
@@ -367,6 +370,8 @@ function Reader({ book }: { book: Book }) {
   };
 
   const understand = (text: string, command: Command) => {
+    // A newer "Hey DODO" makes a late "answer" result stale.
+    const mySession = askSession.current;
     const idx = narration.currentIdxRef.current;
     const context = recentSentences(sentences, idx);
     setFeedback('Thinking…');
@@ -382,7 +387,7 @@ function Reader({ book }: { book: Book }) {
           say(result.reply);
           buzzDone();
         } else if (result.action === 'answer') {
-          ask(text);
+          if (askSession.current === mySession) ask(text);
         } else {
           say(result.reply);
         }
@@ -416,6 +421,9 @@ function Reader({ book }: { book: Book }) {
       buzzWake();
       // A new "Hey DODO" interrupts an answer (the narrator rewinds first).
       askSession.current++;
+      // Drop a stale "Thinking…" or previous answer so "Listening…" shows.
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      setFeedback('');
       if (narration.isSpeakingAside) narration.stopAside();
       resumeFrom.current = resumePoint(sentences, narration.currentIdxRef.current);
       narration.duck();
@@ -443,7 +451,8 @@ function Reader({ book }: { book: Book }) {
     onCancel: () => {
       narration.unduck();
     },
-    ignore: (text) => isNarratorEcho(text, nearbyNarration()),
+    ignore: (text) =>
+      isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });
 
   // Keep the paragraph being read on screen, hands-free.
@@ -519,6 +528,13 @@ function Reader({ book }: { book: Book }) {
   // Command feedback first, then narration problems, then the mic's state.
   const message = feedback || narration.error;
 
+
+  // Keep filtering DODO's voice for a moment after it stops talking.
+  useEffect(() => {
+    if (narration.isSpeakingAside) return;
+    const t = setTimeout(() => (answerEcho.current = ''), 2000);
+    return () => clearTimeout(t);
+  }, [narration.isSpeakingAside]);
 
   // Mic: idle → listen; listening → end the turn; answering → stop the answer.
   const onMicPress = () => {
@@ -621,8 +637,9 @@ function Reader({ book }: { book: Book }) {
             style={styles.playButton}
             accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
             onPress={() => {
-              if (narration.isSpeakingAside) narration.stopAside();
-              else if (narration.isPlaying) narration.pause();
+              // During an answer: stop it, then do what the button shows.
+              if (narration.isSpeakingAside) narration.stopAside(false);
+              if (narration.isPlaying) narration.pause();
               else narration.play();
             }}>
             <SymbolView
