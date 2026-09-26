@@ -2,3 +2,4 @@
 .zed/
 *.env
 data/
+.DS_Store
