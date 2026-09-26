@@ -20,10 +20,11 @@
         devShells = {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
+              zed-editor-fhs
               deno
               nodejs_26
               python314
-
+              
               nil
               nixd
               nginx-language-server
