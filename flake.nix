@@ -22,6 +22,7 @@
             buildInputs = with pkgs; [
               deno
               nodejs_26
+              python314
 
               nil
               nixd
