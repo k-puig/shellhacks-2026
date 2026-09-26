@@ -393,38 +393,20 @@ function Reader({ book }: { book: Book }) {
   // Keep the paragraph being read on screen, hands-free.
   const scroll = useRef<Animated.ScrollView>(null);
 
-  // Controls drop on scroll down and stay down until the tab bar comes back:
-  // when the user scrolls up, or reaches the top. Narration's own scrolling
-  // and the bounce at the end of the book never bring them up.
+  // Controls drop once when scrolling down (as the tab bar minimizes) and stay
+  // down: scrolling back up doesn't bounce them, only returning to the top does.
   const lastScrollY = useSharedValue(0);
   const dockDown = useSharedValue(0);
-  const userScrolling = useSharedValue(false);
   const onScroll = useAnimatedScrollHandler({
-    onBeginDrag: () => {
-      userScrolling.value = true;
-    },
-    onEndDrag: () => {
-      userScrolling.value = false;
-    },
-    onMomentumBegin: () => {
-      userScrolling.value = true;
-    },
-    onMomentumEnd: () => {
-      userScrolling.value = false;
-    },
     onScroll: (e) => {
       const y = e.contentOffset.y;
       if (y <= 0) {
         dockDown.value = 0;
         lastScrollY.value = 0;
-        return;
+      } else if (y - lastScrollY.value > SCROLL_JITTER) {
+        dockDown.value = 1;
       }
-      if (y >= e.contentSize.height - e.layoutMeasurement.height) return;
-      const dy = y - lastScrollY.value;
-      if (Math.abs(dy) <= SCROLL_JITTER) return;
-      if (dy > 0) dockDown.value = 1;
-      else if (userScrolling.value) dockDown.value = 0;
-      lastScrollY.value = y;
+      if (y > 0) lastScrollY.value = Math.min(lastScrollY.value, y);
     },
   });
 
