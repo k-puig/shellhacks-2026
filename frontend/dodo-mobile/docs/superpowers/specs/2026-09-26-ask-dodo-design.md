@@ -56,10 +56,11 @@ Success means:
   `who`, `whom`, `whose`, `what`, `when`, `where`, `which`, `how`, `is`,
   `are`, `does`, `do`, `did`, `can`, `could`, `explain`, `tell me`,
   `remind me`, `what does … mean`, or ends with `?`.
-- Question detection runs last, just before `unknown`: any phrase that matches
-  an existing command stays that command, even if it starts with a question
-  word. "What's the next chapter" stays `nextChapter`; "can you highlight that"
-  stays a highlight; "stop" stays `pause`; "note …" stays a note.
+- Order: note, highlight and next/previous chapter commands are checked first;
+  then questions; then the single-word commands (pause, play, repeat, skip,
+  faster, slower), which match a word anywhere and would otherwise swallow
+  questions like "why did she stop?". "Can you pause" stays a pause: "can/could
+  you" only counts as a question before "explain" or "tell".
 
 ### `src/ai/askDodo.ts` (new): answering
 

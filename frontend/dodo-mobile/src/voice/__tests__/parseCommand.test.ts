@@ -37,3 +37,31 @@ describe('isBareHighlight', () => {
     'highlight the last two sentences',
   ])('sends "%s" to Gemini', (text) => expect(isBareHighlight(text)).toBe(false));
 });
+
+describe('questions', () => {
+  it.each([
+    'why did the rabbit stop',
+    'what happens next',
+    'who is that again',
+    'what does countenance mean',
+    'explain this part',
+    'can you explain the tea party',
+    'tell me about the Duchess',
+    'is the duchess the queen?',
+    'she was late?',
+  ])('treats "%s" as a question', (text) => {
+    expect(parseCommand(text)).toEqual({ type: 'question', text });
+  });
+
+  it.each([
+    ['stop', 'pause'],
+    ['next chapter', 'nextChapter'],
+    ["what's the next chapter", 'nextChapter'],
+    ['can you pause', 'pause'],
+    ['keep going', 'play'],
+    ['highlight the part about the rabbit', 'highlight'],
+    ['note why she left', 'note'],
+  ])('keeps "%s" as the %s command', (text, type) => {
+    expect(parseCommand(text).type).toBe(type);
+  });
+});

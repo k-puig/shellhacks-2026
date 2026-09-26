@@ -11,10 +11,16 @@ export type Command =
   | { type: 'previousChapter' }
   | { type: 'faster' }
   | { type: 'slower' }
+  | { type: 'question'; text: string }
   | { type: 'unknown'; heard: string };
 
 const NOTE_PREFIX =
   /^(?:please\s+)?(?:(?:write|take|add|make|save)\s+(?:a\s+|this\s+)?note|note)\s*(?:that|saying|:)?\s*/;
+
+// Phrases that ask about the book. Checked before the single-word commands,
+// which match anywhere ("why did she stop?" must not pause).
+const QUESTION =
+  /^(?:(?:why|who|whom|whose|what|when|where|which|how|is|are|was|were|does|do|did)\b|explain\b|tell me\b|remind me\b|(?:can|could) you (?:explain|tell)\b)/;
 
 // Turns the words spoken after "Hey DODO" into an action.
 export function parseCommand(raw: string): Command {
@@ -33,6 +39,7 @@ export function parseCommand(raw: string): Command {
   }
   if (/\bnext chapter\b/.test(text)) return { type: 'nextChapter' };
   if (/\b(?:previous|last) chapter\b/.test(text)) return { type: 'previousChapter' };
+  if (QUESTION.test(text) || raw.trim().endsWith('?')) return { type: 'question', text: raw.trim() };
   if (/\b(?:pause|stop|hold on|wait)\b/.test(text)) return { type: 'pause' };
   if (/\b(?:play|resume|continue|keep (?:going|reading)|go on)\b/.test(text)) return { type: 'play' };
   if (/\b(?:repeat|go back|rewind|again)\b/.test(text)) return { type: 'repeat' };
