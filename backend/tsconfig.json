@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "experimentalDecorators": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["./app/*"],
+      "@package/*": ["./package/*"],
+    },
+  },
+}

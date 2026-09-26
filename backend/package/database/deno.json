@@ -2,7 +2,12 @@
   "tasks": {
     "dev": "deno run --watch --allow-net main.ts"
   },
+  "compilerOptions": {
+    "experimentalDecorators": true
+  },
   "imports": {
+    "@app/": "../../app/",
+    "@package/": "../",
     "@mikro-orm/core": "npm:@mikro-orm/core@^7.2.1",
     "@mikro-orm/mongodb": "npm:@mikro-orm/mongodb@^7.2.1",
     "@mikro-orm/postgresql": "npm:@mikro-orm/postgresql@^7.2.1",
