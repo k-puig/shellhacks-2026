@@ -12,6 +12,7 @@
     "jsxImportSourceTypes": "@types/react"
   },
   "imports": {
+    "@auth0/auth0-react": "npm:@auth0/auth0-react@^2.27.0",
     "@deno/vite-plugin": "npm:@deno/vite-plugin@^2.0.2",
     "@types/react": "npm:@types/react@^19.2.18",
     "@types/react-dom": "npm:@types/react-dom@^19.2.7",

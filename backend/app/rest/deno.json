@@ -1,7 +1,8 @@
 {
   "imports": {
-    "hono": "jsr:@hono/hono@^4.13.8",
-    "@package/": "../../package/"
+    "@auth0/auth0-hono": "npm:@auth0/auth0-hono@^1.2.6",
+    "@package/": "../../package/",
+    "hono": "npm:hono@^4.13.9"
   },
   "tasks": {
     "start": "deno run --allow-net --allow-env main.ts"
