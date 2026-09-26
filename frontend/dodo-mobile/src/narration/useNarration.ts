@@ -14,6 +14,8 @@ import { wordAt } from './wordTimings';
 
 // How often the player reports its position, which drives word highlighting.
 const UPDATE_INTERVAL_MS = 100;
+// Narrator volume while DODO listens for a command.
+const DUCK_VOLUME = 0.2;
 
 const paragraphText = (p: Paragraph) => p.words.map((w) => w.text).join(' ');
 
@@ -154,6 +156,17 @@ export function useNarration(book: Book) {
     else moveTo(idx);
   };
 
+  // Quieter while listening for a command, without stopping the book.
+  // Assigning volume is expo-audio's API; it runs in event handlers, not render.
+  const duck = () => {
+    // eslint-disable-next-line react-hooks/immutability
+    player.volume = DUCK_VOLUME;
+  };
+  const unduck = () => {
+    // eslint-disable-next-line react-hooks/immutability
+    player.volume = 1;
+  };
+
   const changeRate = (delta: number) => {
     const next = Math.min(2, Math.max(0.5, Math.round((rateRef.current + delta) * 10) / 10));
     rateRef.current = next;
@@ -180,5 +193,7 @@ export function useNarration(book: Book) {
     pause,
     seek,
     changeRate,
+    duck,
+    unduck,
   };
 }

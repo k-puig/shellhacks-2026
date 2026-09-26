@@ -48,3 +48,10 @@ export function parseCommand(raw: string): Command {
 const INSTANT: Command['type'][] = ['pause', 'play', 'faster', 'slower', 'nextChapter', 'previousChapter'];
 
 export const isInstantCommand = (command: Command) => INSTANT.includes(command.type);
+
+// "Highlight that" with nothing more to it: the sentence just read, done on the
+// phone right away. Anything that describes what to highlight goes to Gemini.
+export const isBareHighlight = (raw: string) =>
+  /^(?:highlight|mark|save)(?: (?:that|this|it))?(?: please)?$/.test(
+    raw.toLowerCase().replace(/[.,!?]/g, '').trim(),
+  );

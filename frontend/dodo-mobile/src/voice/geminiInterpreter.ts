@@ -13,7 +13,7 @@ const MODEL = process.env.EXPO_PUBLIC_GEMINI_MODEL ?? 'gemini-3.5-flash-lite';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const TIMEOUT_MS = 8000;
 // How many sentences of recent narration Gemini gets to choose from.
-const CONTEXT_SENTENCES = 8;
+const CONTEXT_SENTENCES = 10;
 
 export const isGeminiConfigured = () => Boolean(API_KEY);
 

@@ -31,19 +31,21 @@ type Options = {
   onWake: () => void;
   onCommand: (command: string) => void;
   onCancel: () => void;
+  // Speech to drop, e.g. the narrator's voice picked up by the mic.
+  ignore?: (text: string) => boolean;
 };
 
 // Always-on listener: keeps continuous recognition running, watches the
 // transcript for "Hey DODO", then hands whatever follows it to onCommand.
-export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
+export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const [status, setStatus] = useState<VoiceStatus>('starting');
   const [heard, setHeard] = useState('');
   // Last error from the recognizer, shown in the UI so failures are debuggable.
   const [errorDetail, setErrorDetail] = useState('');
 
-  const handlers = useRef({ onWake, onCommand, onCancel });
+  const handlers = useRef({ onWake, onCommand, onCancel, ignore });
   useEffect(() => {
-    handlers.current = { onWake, onCommand, onCancel };
+    handlers.current = { onWake, onCommand, onCancel, ignore };
   });
 
   const awake = useRef(false);
@@ -179,13 +181,20 @@ export function useWakeWord({ onWake, onCommand, onCancel }: Options) {
     if (!read) return;
     vlog('read', JSON.stringify(read));
 
+    // The narrator keeps playing (quieter) while we listen, so drop its words.
+    let command = read.command;
+    if (command && handlers.current.ignore?.(command)) {
+      vlog('ignored narrator echo', JSON.stringify(command));
+      if (!read.woke) return;
+      command = '';
+    }
+
     if (!awake.current) {
       awake.current = true;
       setStatus('awake');
       handlers.current.onWake();
     }
 
-    const { command } = read;
     setHeard(command);
 
     if (timer.current) clearTimeout(timer.current);

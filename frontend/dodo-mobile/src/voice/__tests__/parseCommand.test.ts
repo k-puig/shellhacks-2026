@@ -1,4 +1,4 @@
-import { isInstantCommand, parseCommand } from '../parseCommand';
+import { isBareHighlight, isInstantCommand, parseCommand } from '../parseCommand';
 
 const instant = (text: string) => isInstantCommand(parseCommand(text));
 
@@ -23,4 +23,17 @@ describe('isInstantCommand', () => {
   it('waits on anything it does not recognize', () => {
     expect(instant('what does this word mean')).toBe(false);
   });
+});
+
+describe('isBareHighlight', () => {
+  it.each(['highlight', 'highlight that', 'Highlight this.', 'highlight it please', 'mark that'])(
+    'handles "%s" on the phone',
+    (text) => expect(isBareHighlight(text)).toBe(true),
+  );
+
+  it.each([
+    'highlight the part about the rabbit',
+    'highlight that in blue',
+    'highlight the last two sentences',
+  ])('sends "%s" to Gemini', (text) => expect(isBareHighlight(text)).toBe(false));
 });

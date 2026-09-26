@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -25,7 +26,8 @@ import {
   recentSentences,
   splitSentences,
 } from '@/voice/geminiInterpreter';
-import { parseCommand, type Command } from '@/voice/parseCommand';
+import { isNarratorEcho } from '@/voice/narratorEcho';
+import { isBareHighlight, parseCommand, type Command } from '@/voice/parseCommand';
 import { useWakeWord } from '@/voice/useWakeWord';
 
 // Height of the floating iOS tab bar above the home-indicator inset.
@@ -85,8 +87,11 @@ function Reader({ book }: { book: Book }) {
   );
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const wasPlaying = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
+  const buzzWake = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const buzzDone = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
   const say = (message: string) => {
     setFeedback(message);
@@ -224,11 +229,13 @@ function Reader({ book }: { book: Book }) {
     const idx = narration.currentIdxRef.current;
     switch (command.type) {
       case 'pause':
+        narration.pause();
         say('Paused');
-        return false;
+        break;
       case 'play':
+        if (!narration.isPlaying) narration.play();
         say('Playing');
-        return true;
+        break;
       case 'highlight':
         addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
         break;
@@ -241,13 +248,13 @@ function Reader({ book }: { book: Book }) {
         break;
       case 'repeat': {
         const p = paragraphOf(idx);
-        narration.seek(sentenceAround(p, idx).startIdx, false);
+        narration.seek(sentenceAround(p, idx).startIdx, narration.isPlaying);
         say('Going back');
         break;
       }
       case 'skip': {
         const next = narration.paragraphs[narration.paragraphs.indexOf(paragraphOf(idx)) + 1];
-        if (next) narration.seek(next.words[0].idx, false);
+        if (next) narration.seek(next.words[0].idx, narration.isPlaying);
         say('Skipping ahead');
         break;
       }
@@ -255,14 +262,14 @@ function Reader({ book }: { book: Book }) {
         const next = chapterStarts.find((s) => s > idx);
         if (next === undefined) say('This is the last chapter');
         else {
-          narration.seek(next, false);
+          narration.seek(next, narration.isPlaying);
           say('Next chapter');
         }
         break;
       }
       case 'previousChapter': {
         const current = chapterStarts.filter((s) => s <= idx).length - 1;
-        narration.seek(chapterStarts[Math.max(0, current - 1)], false);
+        narration.seek(chapterStarts[Math.max(0, current - 1)], narration.isPlaying);
         say('Previous chapter');
         break;
       }
@@ -276,9 +283,9 @@ function Reader({ book }: { book: Book }) {
         break;
       case 'unknown':
         say(`Didn't catch that: “${command.heard}”`);
-        break;
+        return false;
     }
-    return wasPlaying.current;
+    return true;
   };
 
   // Highlight / note / unrecognized commands go to Gemini, which reads the
@@ -289,16 +296,17 @@ function Reader({ book }: { book: Book }) {
     const idx = narration.currentIdxRef.current;
     const context = recentSentences(sentences, idx);
     setFeedback('Thinking…');
-    if (wasPlaying.current) narration.play();
 
     interpretCommand(text, context, words)
       .then((result) => {
         if (result.action === 'highlight') {
           addHighlight({ startIdx: result.startIdx, endIdx: result.endIdx }, result.color);
           say(result.reply);
+          buzzDone();
         } else if (result.action === 'note') {
           library.addNote({ bookId: book.id, wordIdx: result.wordIdx, content: result.content });
           say(result.reply);
+          buzzDone();
         } else {
           say(result.reply);
         }
@@ -307,31 +315,50 @@ function Reader({ book }: { book: Book }) {
         console.log('[dodo] Gemini failed, using fallback:', String(error));
         if (command.type === 'highlight') {
           addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
-        }
-        else if (command.type === 'note' && command.content) addNote(idx, command.content);
-        else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
+          buzzDone();
+        } else if (command.type === 'note' && command.content) {
+          addNote(idx, command.content);
+          buzzDone();
+        } else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
         else say(`Didn't catch that: “${text}”`);
       });
   };
 
+  // The book around the word being read: what the mic hears from the narrator.
+  const nearbyNarration = () => {
+    const idx = narration.currentIdxRef.current;
+    const at = sentences.findIndex((s) => idx >= s.startIdx && idx <= s.endIdx);
+    return sentences
+      .slice(Math.max(0, at - 2), at + 3)
+      .map((s) => s.text)
+      .join(' ');
+  };
+
+  // The narrator keeps playing while DODO listens, just quieter.
   const voice = useWakeWord({
     onWake: () => {
-      wasPlaying.current = narration.isPlaying;
-      narration.pause();
+      buzzWake();
+      narration.duck();
     },
     onCommand: (text) => {
+      narration.unduck();
       const command = parseCommand(text);
+      // "Highlight that" is done here right away; describing what to
+      // highlight ("the part about…"), notes, and anything else go to Gemini.
       const needsUnderstanding =
-        command.type === 'highlight' || command.type === 'note' || command.type === 'unknown';
+        (command.type === 'highlight' && !isBareHighlight(text)) ||
+        command.type === 'note' ||
+        command.type === 'unknown';
       if (needsUnderstanding && isGeminiConfigured()) {
         understand(text, command);
         return;
       }
-      if (run(command)) narration.play();
+      if (run(command)) buzzDone();
     },
     onCancel: () => {
-      if (wasPlaying.current) narration.play();
+      narration.unduck();
     },
+    ignore: (text) => isNarratorEcho(text, nearbyNarration()),
   });
 
   // Keep the paragraph being read on screen, hands-free.
