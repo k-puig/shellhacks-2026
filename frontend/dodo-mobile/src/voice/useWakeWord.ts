@@ -42,6 +42,12 @@ type Options = {
 export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const [status, setStatus] = useState<VoiceStatus>('starting');
   const [heard, setHeard] = useState('');
+  // Same as `heard`, readable from callbacks (the mic button ends the turn with it).
+  const heardRef = useRef('');
+  const hear = (text: string) => {
+    heardRef.current = text;
+    setHeard(text);
+  };
   // Last error from the recognizer, shown in the UI so failures are debuggable.
   const [errorDetail, setErrorDetail] = useState('');
 
@@ -205,7 +211,7 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
       handlers.current.onWake();
     }
 
-    setHeard(command);
+    hear(command);
 
     if (timer.current) clearTimeout(timer.current);
     // Short commands like "pause" run as soon as they're heard.
@@ -288,11 +294,19 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
     awake.current = true;
     tapSince.current = lastTranscript.current;
     setStatus('awake');
-    setHeard('');
+    hear('');
     handlers.current.onWake();
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => finish(''), WAKE_TIMEOUT_MS);
   };
 
-  return { status, heard, errorDetail, retry, wake };
+  // The mic button while listening: send what's been said now, without waiting
+  // for silence; with nothing said yet, stop listening.
+  const endTurn = () => {
+    if (!awake.current) return;
+    vlog('endTurn() by tap', JSON.stringify(heardRef.current));
+    finish(heardRef.current);
+  };
+
+  return { status, heard, errorDetail, retry, wake, endTurn };
 }
