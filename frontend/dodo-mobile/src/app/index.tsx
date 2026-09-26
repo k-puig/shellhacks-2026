@@ -17,5 +17,5 @@ export default function Index() {
     return <Redirect href="/welcome" />;
   }
 
-  return <Redirect href={'/screens/home' as any} />;
+  return <Redirect href="/screens/home" />;
 }

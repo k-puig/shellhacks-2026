@@ -1,16 +1,8 @@
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { useAuth } from '../auth/useAuth';
-
-const colors = {
-  background: '#15131C',
-  surface: '#1F1C29',
-  border: '#2A2635',
-  text: '#F2EDE4',
-  textSecondary: '#8B87A0',
-  accent: '#E3A548',
-};
+import { useAuth } from '@/auth/useAuth';
+import { colors } from '@/theme';
 
 // Static for the MVP — these become real preferences later.
 const groups: { title: string; rows: [string, string][] }[] = [
@@ -46,8 +38,9 @@ export default function SettingsScreen() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace('/welcome' as any);
+    router.replace('/welcome');
   };
+
   return (
     // Presented as a sheet, so no top safe-area inset is needed.
     <View style={styles.screen}>
@@ -71,13 +64,9 @@ export default function SettingsScreen() {
             </View>
           </View>
         ))}
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-          accessibilityRole="button"
-        >
+        <Pressable style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
           <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -117,9 +106,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  logoutText: {
-    color: '#FF6B6B',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  logoutText: { color: '#FF6B6B', fontSize: 16, fontWeight: '600' },
 });

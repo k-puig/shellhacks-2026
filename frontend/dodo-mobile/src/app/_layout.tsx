@@ -1,18 +1,26 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
+import { Appearance } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { IntroAnimation } from '@/components/IntroAnimation';
+import { LibraryProvider } from '@/data/libraryStore';
 
-SplashScreen.preventAutoHideAsync();
+// DODO is dark-only; this also makes the native glass tab bar render dark.
+Appearance.setColorScheme('dark');
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  const [showIntro, setShowIntro] = useState(true);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <LibraryProvider>
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* Opened from the gear on Home; swipe down to close. */}
+        <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
+      </Stack>
+      {/* Plays once per launch over Home, which renders underneath. */}
+      {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
+    </LibraryProvider>
   );
 }

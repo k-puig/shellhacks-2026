@@ -41,3 +41,9 @@ example
 # generated native folders
 /ios
 /android
+DODO_PROJECT_BRIEF.md
+CLAUDE.md
+AGENTS.md
+# Test books (copyrighted; never commit)
+*.epub
+src/data/generated/
