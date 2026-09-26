@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { auth, type OIDCVariables } from "@auth0/auth0-hono";
+//import * as z from "zod";
 
 const user = new Hono<{ Variables: OIDCVariables }>();
 user.use(

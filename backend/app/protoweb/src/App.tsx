@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "./assets/vite.svg";
 import heroImg from "./assets/hero.png";
@@ -6,10 +7,43 @@ import "./App.css";
 
 function App() {
   const [count, setCount] = useState(0);
+  const { isAuthenticated, isLoading, user, loginWithRedirect, logout } =
+    useAuth0();
 
   return (
     <>
       <section id="center">
+        <div className="auth-controls" role="group" aria-label="Account">
+          {isLoading
+            ? <p role="status">Checking sign-in…</p>
+            : isAuthenticated
+            ? (
+              <>
+                <span>
+                  Signed in as {user?.name ?? user?.email ?? "your account"}
+                </span>
+                <button
+                  className="auth-button"
+                  type="button"
+                  onClick={() =>
+                    logout({
+                      logoutParams: { returnTo: globalThis.location.origin },
+                    })}
+                >
+                  Log out
+                </button>
+              </>
+            )
+            : (
+              <button
+                className="auth-button"
+                type="button"
+                onClick={() => loginWithRedirect()}
+              >
+                Log in
+              </button>
+            )}
+        </div>
         <div className="hero">
           <img src={heroImg} className="base" width="170" height="179" alt="" />
           <img src={reactLogo} className="framework" alt="React logo" />
@@ -23,6 +57,7 @@ function App() {
         </div>
         <button
           className="counter"
+          type="button"
           onClick={() => setCount((count) => count + 1)}
         >
           Count is {count}
