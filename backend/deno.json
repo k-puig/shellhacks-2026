@@ -1,5 +1,10 @@
 {
-  "workspace": ["./app/rest", "./package/database", "./package/s3"],
+  "workspace": [
+    "./app/rest",
+    "./app/protoweb",
+    "./package/database",
+    "./package/s3"
+  ],
   "lock": {
     "path": "./deno.lock"
   },
@@ -9,6 +14,7 @@
   "compilerOptions": {
     "experimentalDecorators": true
   },
+  "nodeModulesDir": "auto",
   "imports": {
     "@app/": "./app/",
     "@package/": "./package/",
