@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AUTH_ENABLED } from '@/auth/config';
 import { useAuth } from '@/auth/useAuth';
 import { colors } from '@/theme';
 
@@ -64,9 +65,11 @@ export default function SettingsScreen() {
             </View>
           </View>
         ))}
-        <Pressable style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
-          <Text style={styles.logoutText}>Log Out</Text>
-        </Pressable>
+        {AUTH_ENABLED && (
+          <Pressable style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
+            <Text style={styles.logoutText}>Log Out</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );

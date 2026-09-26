@@ -1,9 +1,12 @@
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
+import { AUTH_ENABLED } from '../auth/config';
 import { useAuth } from '../auth/useAuth';
 
 export default function Index() {
   const { isAuthenticated, isLoading } = useAuth();
+
+  if (!AUTH_ENABLED) return <Redirect href="/screens/home" />;
 
   if (isLoading) {
     return (
