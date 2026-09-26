@@ -21,6 +21,7 @@
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
               deno
+              nodejs_26
 
               nil
               nixd
