@@ -10,13 +10,11 @@ import {
   callback,
   logout,
   type OIDCEnv,
-  requiresAuth,
 } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
-import {
-  createUserResponse,
-  UserService,
-} from "@app/rest/user/service/user-service.ts";
+import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
+import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
+import { UserService } from "@app/rest/user/user-service.ts";
 
 export function createUserRouter(
   userService: UserService,
@@ -58,6 +56,7 @@ export function createUserRouter(
   });
 
   // Current signed in user info
+  // TOOD: how does this get the user information? eg username
   user.get("/", async (c) => {
     const cookie = await getSignedCookie(
       c,
@@ -66,7 +65,7 @@ export function createUserRouter(
     );
     try {
       const obj = JSON.parse(cookie || "");
-      const userInfo = await createUserResponse.safeParseAsync(obj);
+      const userInfo = await createUserBaseResponseZObj.safeParseAsync(obj);
       if (!userInfo.success) {
         return c.text("could not parse cookie info", 401);
       }
@@ -98,10 +97,11 @@ export function createUserRouter(
       return c.newResponse("unable to parse user name and/or sub", 400);
     }
 
-    const userInfo = await userService.createUserOrDoNothing(
-      parsedUserData.data.name,
-      parsedUserData.data.sub,
-    );
+    const userInfo = await userService.createUserOrDoNothing({
+      id: crypto.randomUUID(),
+      username: parsedUserData.data.name,
+      authId: parsedUserData.data.sub,
+    });
 
     await setSignedCookie(
       c,
@@ -117,6 +117,67 @@ export function createUserRouter(
 
     return c.redirect("/", 302);
   });
+
+  user.delete("/delete", async (c) => {
+    const session = await c.var.auth0Client?.getSession(c);
+    const userData = z.object({
+      sub: z.string(),
+    });
+
+    const parsedUserData = await userData.safeParseAsync(session?.user);
+    if (!parsedUserData.success) {
+      console.error(
+        "Auth0 session user did not match expected schema:",
+        parsedUserData.error.issues,
+      );
+      return c.newResponse("unable to parse user auth id", 400);
+    }
+
+    try {
+      const response = await userService.deleteUserByAuthId(
+        parsedUserData.data.sub,
+      );
+
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({ code: error.code, message: error.message, content: null }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
+  user.update("/update", async (c) => {
+    const session = await c.var.auth0Client?.getSession(c);
+
+    const userData = z.object({
+      sub: z.string();
+    })
+
+    const parsedUserData = await userData.safeParseAsync(session?.user);
+    if (!parsedUserData.success) {
+      console.error(
+        "Auth0 session user did not match expected schema:",
+        parsedUserData.error.issues,
+      );
+      return c.newResponse("unable to parse user auth id", 400);
+    }
+
+    try {
+      const response = await userService.updateUser(
+        parsedUserData.data.sub
+      );
+
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({ code: error.code, message: error.message, content: null }, error.code);
+      }
+
+      throw error;
+    }
+  })
 
   return user;
 }
