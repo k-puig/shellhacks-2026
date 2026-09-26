@@ -6,12 +6,18 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import Animated, {
+  ReduceMotion,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
@@ -34,6 +40,12 @@ import { useWakeWord } from '@/voice/useWakeWord';
 const TAB_BAR_HEIGHT = 56;
 // Room the floating controls take, so the last paragraph can scroll above them.
 const DOCK_HEIGHT = 110;
+// How far the controls drop while scrolling down, alongside the tab bar
+// minimizing; small enough to clear the minimized tab bar pill.
+const DOCK_DROP = 40;
+// Scroll movement smaller than this doesn't change the controls' position.
+const SCROLL_JITTER = 8;
+const DOCK_SPRING = { damping: 22, stiffness: 220, reduceMotion: ReduceMotion.System };
 
 // Book text uses a serif; Georgia ships with iOS, "serif" maps to Noto Serif on Android.
 const READING_FONT = Platform.select({ ios: 'Georgia', default: 'serif' });
@@ -362,7 +374,25 @@ function Reader({ book }: { book: Book }) {
   });
 
   // Keep the paragraph being read on screen, hands-free.
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<Animated.ScrollView>(null);
+
+  // Controls drop on scroll down and come back on scroll up, like the tab bar.
+  const lastScrollY = useSharedValue(0);
+  const dockDown = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      const y = e.contentOffset.y;
+      const dy = y - lastScrollY.value;
+      if (y <= 0) dockDown.value = 0;
+      else if (dy > SCROLL_JITTER) dockDown.value = 1;
+      else if (dy < -SCROLL_JITTER) dockDown.value = 0;
+      else return;
+      lastScrollY.value = y;
+    },
+  });
+  const dockStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
+  }));
   // onLayout y is relative to the parent, so keep chapter offsets and paragraph
   // offsets (within their chapter) and add them to get a scroll position.
   const chapterY = useRef<Record<number, number>>({});
@@ -404,8 +434,10 @@ function Reader({ book }: { book: Book }) {
 
       {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
-        <ScrollView
+        <Animated.ScrollView
           ref={scroll}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={[
             styles.content,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + DOCK_HEIGHT },
@@ -462,12 +494,12 @@ function Reader({ book }: { book: Book }) {
               ))}
             </View>
           ))}
-        </ScrollView>
+        </Animated.ScrollView>
       </ScrollViewMarker>
 
       {/* Floats over the text so the glass controls show the page through them. */}
-      <View
-        style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }]}
+      <Animated.View
+        style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }, dockStyle]}
         pointerEvents="box-none">
         {/* Only shown when there's something to say; idle listening stays silent. */}
         {(message || voice.status !== 'listening') && (
@@ -484,25 +516,6 @@ function Reader({ book }: { book: Book }) {
         )}
 
         <View style={styles.controls}>
-          {/* Same as saying "Hey DODO", for when the room is too loud. */}
-          <View style={styles.sideButton}>
-            <ActionButton
-              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
-              state="idle"
-              onPress={voice.status === 'error' ? voice.retry : voice.wake}
-              accessibilityLabel="Give DODO a voice command"
-            />
-          </View>
-
-          <View style={styles.sideButton}>
-            <ActionButton
-              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
-              state={buttonState('highlight', highlightTarget)}
-              onPress={onHighlightButton}
-              accessibilityLabel="Highlight the sentence just read"
-            />
-          </View>
-
           <Pressable
             style={styles.playButton}
             accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
@@ -520,6 +533,25 @@ function Reader({ book }: { book: Book }) {
 
           <View style={styles.sideButton}>
             <ActionButton
+              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
+              state={buttonState('highlight', highlightTarget)}
+              onPress={onHighlightButton}
+              accessibilityLabel="Highlight the sentence just read"
+            />
+          </View>
+
+          {/* Same as saying "Hey DODO", for when the room is too loud. */}
+          <View style={styles.sideButton}>
+            <ActionButton
+              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
+              state="idle"
+              onPress={voice.status === 'error' ? voice.retry : voice.wake}
+              accessibilityLabel="Give DODO a voice command"
+            />
+          </View>
+
+          <View style={styles.sideButton}>
+            <ActionButton
               icon={{ ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' }}
               state={buttonState('note', noteTarget)}
               onPress={onNoteButton}
@@ -527,7 +559,7 @@ function Reader({ book }: { book: Book }) {
             />
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       <Modal
         visible={noteAnchor !== null}
