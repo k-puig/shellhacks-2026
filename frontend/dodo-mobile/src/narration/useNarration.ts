@@ -60,6 +60,9 @@ export function useNarration(book: Book) {
       playsInSilentMode: true,
       interruptionMode: 'mixWithOthers',
       shouldRouteThroughEarpiece: false,
+      // Keep reading (and speaking answers) with the screen locked; app.json
+      // already declares the "audio" background mode.
+      shouldPlayInBackground: true,
     });
   }, []);
 
