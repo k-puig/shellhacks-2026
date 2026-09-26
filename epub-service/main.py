@@ -25,6 +25,6 @@ if len(str(xmax)) > 1:
             continue
 
         prepad = len(str(xmax)) - len(str(idx))
-        newname = f"{''.join(['0' for x in range(prepad)])}{idx}{suffix}"
+        newname = f"{''.join(['0' for _ in range(prepad)])}{idx}{suffix}"
 
         os.rename(os.path.basename(origname), os.path.basename(newname))
