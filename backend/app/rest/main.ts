@@ -1,18 +1,16 @@
-export function handler(req: Request): Response {
-  const url = new URL(req.url);
+import { Hono } from "hono";
+import { dummy } from "./dummy/router.ts";
+import { user } from "./user/router.ts";
 
-  if (url.pathname === "/api") {
-    return Response.json({
-      message: "Hello, world!",
-      time: new Date().toISOString(),
-    });
-  }
+const api = new Hono();
 
-  return new Response("<h1>Welcome to Deno!</h1>", {
-    headers: { "content-type": "text/html" },
-  });
-}
+api.get("/", (c) => {
+  return c.text("Hello Hono!");
+});
+api.route("/dummy", dummy);
+api.route("/user", user);
 
-if (import.meta.main) {
-  Deno.serve(handler);
-}
+const app = new Hono();
+app.route("/api/v1", api);
+
+Deno.serve(app.fetch);
