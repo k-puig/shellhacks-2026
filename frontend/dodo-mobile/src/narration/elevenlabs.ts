@@ -51,29 +51,49 @@ export function synthesize(text: string): Promise<Narration> {
 async function fetchNarration(text: string): Promise<Narration> {
   if (!API_KEY) throw new ElevenLabsError(MISSING_KEY_MESSAGE);
 
+  // One deadline for the whole exchange, including downloading the audio,
+  // which can stall on a flaky connection after the headers arrive.
+  const connectError = () => new ElevenLabsError("ElevenLabs: couldn't connect");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  let res: Response;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(connectError());
+    }, TIMEOUT_MS);
+  });
+  deadline.catch(() => {});
+
+  let json: WithTimestamps;
   try {
-    res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/with-timestamps`, {
-      method: 'POST',
-      headers: { 'xi-api-key': API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: MODEL }),
-      signal: controller.signal,
+    let res: Response;
+    try {
+      res = await Promise.race([
+        fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/with-timestamps`, {
+          method: 'POST',
+          headers: { 'xi-api-key': API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, model_id: MODEL }),
+          signal: controller.signal,
+        }),
+        deadline,
+      ]);
+    } catch {
+      throw connectError();
+    }
+
+    if (!res.ok) {
+      const body = await Promise.race([res.json(), deadline]).catch(() => null);
+      console.log('[dodo] ElevenLabs error', res.status, JSON.stringify(body));
+      throw new ElevenLabsError(errorMessage(res.status, body?.detail?.status));
+    }
+
+    json = await Promise.race([res.json() as Promise<WithTimestamps>, deadline]).catch(() => {
+      throw connectError();
     });
-  } catch {
-    throw new ElevenLabsError("ElevenLabs: couldn't connect");
   } finally {
     clearTimeout(timeout);
   }
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    console.log('[dodo] ElevenLabs error', res.status, JSON.stringify(body));
-    throw new ElevenLabsError(errorMessage(res.status, body?.detail?.status));
-  }
-
-  const json = (await res.json()) as WithTimestamps;
   const file = new File(Paths.cache, `narration-${Date.now()}-${fileCount++}.mp3`);
   file.create({ overwrite: true });
   file.write(json.audio_base64, { encoding: 'base64' });
