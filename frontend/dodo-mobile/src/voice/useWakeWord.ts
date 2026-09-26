@@ -99,7 +99,10 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
       },
       iosCategory: {
         category: 'playAndRecord',
-        categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers'],
+        // A2DP, not hands-free Bluetooth: hands-free (allowBluetooth) forces
+        // AirPods into call mode, which garbles the narrator. With A2DP the book
+        // plays in full quality and the iPhone's own mic listens.
+        categoryOptions: ['defaultToSpeaker', 'allowBluetoothA2DP', 'mixWithOthers'],
         mode: 'default',
       },
       // Keep voice processing (echo cancellation) OFF: on iOS it switches the
