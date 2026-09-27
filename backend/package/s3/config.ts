@@ -14,6 +14,7 @@ const hostname = "rustfs";
 const port = "9000";
 
 export const EPUB_S3_BUCKET = "epub";
+export const PFP_S3_BUCKET = "pfp";
 
 export const S3settings: S3ClientConfig = {
   region: Deno.env.get("AWS_REGION") ?? "us-east-1",

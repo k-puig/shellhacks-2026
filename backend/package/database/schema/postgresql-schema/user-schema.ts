@@ -8,4 +8,7 @@ export class UserSchema extends BaseSchema {
 
   @Property({ type: "string", unique: true })
   authId!: string;
+
+  @Property({ type: "string", nullable: true })
+  s3Key?: string;
 }

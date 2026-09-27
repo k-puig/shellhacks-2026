@@ -8,7 +8,10 @@ import {
 import { auth, callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
-import { updateUserRequestZObject } from "@app/rest/user/dtos/user-request-dto.ts";
+import {
+  changeUserProfilePictureRequestZObject,
+  updateUserRequestZObject,
+} from "@app/rest/user/dtos/user-request-dto.ts";
 import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
 import { UserService } from "@app/rest/user/user-service.ts";
 
@@ -131,6 +134,39 @@ export function createUserRouter(
     try {
       const response = await userService.deleteUserByAuthId(
         parsedUserData.data.sub,
+      );
+
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
+  user.patch("/profile-picture", async (c) => {
+    const parsedUserData = await changeUserProfilePictureRequestZObject
+      .safeParseAsync(
+        await c.req.parseBody(),
+      );
+
+    if (!parsedUserData.success) {
+      return c.json({
+        code: 400,
+        message: "Invalid profile picture request",
+        content: parsedUserData.error.issues,
+      }, 400);
+    }
+
+    try {
+      const response = await userService.uploadOrDeleteProfilePicture(
+        parsedUserData.data,
       );
 
       return c.json(response, response.code);
