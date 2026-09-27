@@ -31,17 +31,11 @@ services:
       retries: 5
       start_period: 10s
 
-  dodo-protoweb:
+  dodo-splash:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
-        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
-    command: deno run protoweb
-    environment:
-      - VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN}
-      - VITE_AUTH0_CLIENT_ID=${VITE_AUTH0_CLIENT_ID}
+    command: deno run splash
     depends_on:
       dodo-rest:
         condition: service_started
@@ -58,7 +52,7 @@ services:
     depends_on:
       dodo-rest:
         condition: service_started
-      dodo-protoweb:
+      dodo-splash:
         condition: service_started
 
   rustfs:
