@@ -39,8 +39,17 @@ npx expo start --dev-client --lan -c
 
 Open DODO on the phone and choose your Mac's server from the dev launcher, or open the URL shown by Metro. Add `-c` whenever `.env.local` changes, because env values are bundled at start.
 
+## Adding books
+
+On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, AirDrop…). The app converts it on the phone (`src/data/epub.ts`), with its cover, and it shows up first in the library, even offline. Free EPUBs to try: [Project Gutenberg](https://www.gutenberg.org) (for example `https://www.gutenberg.org/ebooks/11.epub3.images` opened in Safari on the iPhone).
+
+- Chapters come from the book's files in reading order. Contents, copyright, index and Project Gutenberg license pages are skipped, and so are code, tables and images, because they can't be read aloud.
+- Adding a book that's already there shows "Already in your library". A full book you add hides the built-in sample of the same book.
+- PDFs aren't supported. Only EPUBs can be picked.
+
 ## Your data
 
+- Added books are saved **on the phone** as `books/<id>.json`, with their cover as `books/<id>-cover.jpg`.
 - Highlights, notes, asked questions and reading position are saved **on the phone** (`saved-items.json` and `reading-progress.json` in the app's storage), so they survive closing the app. They belong to the phone, not the account, until backend sync lands. Settings → Your data clears them.
 - `src/api/` holds the backend client. It sends the login token with each request and signs out if the backend rejects it. No screen uses it yet. Set `EXPO_PUBLIC_API_URL` when one does.
 

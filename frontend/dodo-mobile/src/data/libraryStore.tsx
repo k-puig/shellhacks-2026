@@ -1,12 +1,29 @@
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 
-import { mockBooks, type AskedQuestion, type Highlight, type Note } from './mockBooks';
+import { loadImportedBooks, saveImportedBook } from './bookFiles';
+import type { EpubCover } from './epub';
+import { buildLibrary, isSameBook } from './library';
+import { mockBooks, type AskedQuestion, type Book, type Highlight, type Note } from './mockBooks';
 import { loadPositions, savePositions } from './progressFile';
 import { withoutBook, withPosition, type Positions } from './readingProgress';
 import { loadSavedItems, saveSavedItems } from './savedFile';
 import type { Saved } from './savedItems';
 
 type LibraryState = {
+  // Added books first (newest first), then the built-in samples.
+  books: Book[];
+  getBook: (id: string | undefined) => Book;
+  // Saves a converted book on the phone and puts it in the library. Returns
+  // the copy already there instead if the listener added this book before.
+  addBook: (book: Book, cover: EpubCover | null) => Book;
   currentBookId: string;
   openBook: (bookId: string) => void;
   highlights: Saved<Highlight>[];
@@ -38,6 +55,7 @@ const newId = (prefix: string) => `${prefix}${Date.now()}-${nextId++}`;
 
 // Saved on the phone for now; swap for TanStack Query + the backend later.
 export function LibraryProvider({ children }: PropsWithChildren) {
+  const [importedBooks, setImportedBooks] = useState<Book[]>([]);
   const [currentBookId, openBook] = useState(mockBooks[0].id);
   const [highlights, setHighlights] = useState<Saved<Highlight>[]>([]);
   const [notes, setNotes] = useState<Saved<Note>[]>([]);
@@ -45,6 +63,15 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   const [savedLoaded, setSavedLoaded] = useState(false);
   const [positions, setPositions] = useState<Positions>({});
   const [positionsLoaded, setPositionsLoaded] = useState(false);
+
+  useEffect(() => {
+    loadImportedBooks().then((saved) => setImportedBooks((added) => buildLibrary(added, saved)));
+  }, []);
+  const books = useMemo(() => buildLibrary(importedBooks, mockBooks), [importedBooks]);
+  const getBook = useCallback(
+    (id: string | undefined) => books.find((b) => b.id === id) ?? books[0],
+    [books],
+  );
 
   useEffect(() => {
     loadPositions().then((saved) => {
@@ -72,6 +99,15 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   return (
     <LibraryContext.Provider
       value={{
+        books,
+        getBook,
+        addBook: (book, cover) => {
+          const existing = importedBooks.find((b) => isSameBook(b, book));
+          if (existing) return existing;
+          const saved = saveImportedBook(book, cover);
+          setImportedBooks((all) => [saved, ...all]);
+          return saved;
+        },
         currentBookId,
         openBook,
         highlights,

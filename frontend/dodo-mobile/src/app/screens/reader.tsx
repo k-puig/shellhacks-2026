@@ -28,7 +28,7 @@ import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
 import { useSettings } from '@/data/settingsStore';
 import { chapterIndexAt, nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
-import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
+import type { Book, Highlight, Note, Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
 import {
@@ -179,7 +179,7 @@ function sentenceAround(paragraph: Paragraph, idx: number) {
 }
 
 export default function ReaderScreen() {
-  const { currentBookId } = useLibrary();
+  const { currentBookId, getBook } = useLibrary();
   // Remount per book so narration and voice state start fresh.
   return <Reader key={currentBookId} book={getBook(currentBookId)} />;
 }

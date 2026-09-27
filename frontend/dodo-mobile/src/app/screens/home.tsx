@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 import { BookCover } from '@/components/BookCover';
+import { EpubError } from '@/data/epub';
 import { useLibrary } from '@/data/libraryStore';
-import { getBook, mockBooks, type Book } from '@/data/mockBooks';
+import type { Book } from '@/data/mockBooks';
+import { pickEpubBook } from '@/data/pickEpub';
 import { bookProgress } from '@/data/readingProgress';
 import { colors } from '@/theme';
 
@@ -19,14 +22,33 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export default function HomeScreen() {
-  const { currentBookId, openBook, positions } = useLibrary();
+  const { books, getBook, addBook, currentBookId, openBook, positions } = useLibrary();
   // Real listening progress, from the furthest point reached in each book.
   const progressOf = (book: Book) => bookProgress(book, positions[book.id]?.furthestIdx ?? -1);
   const current = getBook(currentBookId);
+  const [adding, setAdding] = useState(false);
 
   const open = (book: Book) => {
     openBook(book.id);
     router.navigate('/screens/reader');
+  };
+
+  const addFromFiles = async () => {
+    setAdding(true);
+    try {
+      const picked = await pickEpubBook();
+      if (picked && addBook(picked.book, picked.cover).id !== picked.book.id) {
+        Alert.alert('Already in your library', `“${picked.book.title}” is already on your shelf.`);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Couldn't add this book",
+        error instanceof EpubError ? error.message : 'Something went wrong reading the file. Try another EPUB.',
+      );
+      console.warn('[dodo] Could not add book:', String(error));
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -62,9 +84,25 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          <Text style={styles.sectionLabel}>Library</Text>
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelInRow]}>Library</Text>
+            <Pressable
+              style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+              onPress={addFromFiles}
+              disabled={adding}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Add a book from an EPUB file">
+              {adding ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <SymbolView name={{ ios: 'plus', android: 'add', web: 'add' }} tintColor={colors.accent} size={15} />
+              )}
+              <Text style={styles.addLabel}>{adding ? 'Adding…' : 'Add book'}</Text>
+            </Pressable>
+          </View>
           <View style={styles.grid}>
-            {mockBooks.map((book) => (
+            {books.map((book) => (
               <Pressable key={book.id} style={styles.gridItem} onPress={() => open(book)}>
                 <BookCover book={book} style={styles.cover} />
                 <Text style={styles.gridTitle} numberOfLines={2}>
@@ -101,6 +139,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionLabelInRow: { marginBottom: 0 },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addLabel: { color: colors.accent, fontSize: 15, fontWeight: '600' },
+  pressed: { opacity: 0.6 },
   hero: {
     flexDirection: 'row',
     gap: 16,
