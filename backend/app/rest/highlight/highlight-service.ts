@@ -5,11 +5,13 @@ import type {
   CreateHighlightRequest,
   DeleteHighlightRequest,
   FetchHighlightRequest,
+  UpdateHighlightRequest,
 } from "@app/rest/highlight/dtos/highlight-request-dto.ts";
 import type {
   CreateHighlightBaseResponse,
   DeleteHighlightBaseResponse,
   FetchHighlightBaseResponse,
+  UpdateHighlightBaseResponse,
 } from "@app/rest/highlight/dtos/highlight-response-dto.ts";
 import { HighlightRepository } from "@app/rest/highlight/highlight-repository.ts";
 import { HighlightSchema } from "@package/database/schema/postgresql-schema/index.ts";
@@ -54,6 +56,36 @@ export class HighlightService {
     return await createBaseResponse(
       200,
       "Highlight fetched",
+      toHighlightContent(highlight),
+    );
+  }
+
+  async updateHighlight(
+    req: UpdateHighlightRequest,
+  ): Promise<UpdateHighlightBaseResponse> {
+    const highlight = await this.highlightRepository.findById(req.id);
+
+    if (!highlight) {
+      throw new BaseError(404, "Highlight not found");
+    }
+
+    if (req.bookId !== undefined) {
+      highlight.book = this.highlightRepository.getBookReference(req.bookId);
+    }
+
+    if (req.start !== undefined) {
+      highlight.start = req.start;
+    }
+
+    if (req.end !== undefined) {
+      highlight.end = req.end;
+    }
+
+    await this.highlightRepository.flush();
+
+    return await createBaseResponse(
+      200,
+      "Highlight updated",
       toHighlightContent(highlight),
     );
   }

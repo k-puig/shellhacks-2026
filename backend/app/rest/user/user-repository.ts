@@ -5,7 +5,7 @@ import type { CreateUserRequest } from "@app/rest/user/dtos/user-request-dto.ts"
 
 export class UserRepository extends BaseRepository<UserSchema> {
   constructor(em: EntityManager) {
-    super(em, UserSchema);
+    super(em, UserSchema, (id) => ({ id }));
   }
 
   async createUserOrIgnore(newUser: CreateUserRequest): Promise<UserSchema> {

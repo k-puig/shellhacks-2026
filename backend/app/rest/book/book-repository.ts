@@ -1,3 +1,4 @@
+import type { Ref } from "@mikro-orm/core";
 import type { EntityManager } from "@mikro-orm/postgresql";
 import { BaseRepository } from "@app/rest/lib/base-class/base-repository.ts";
 import {
@@ -9,7 +10,15 @@ import type { CreateBookRequest } from "@app/rest/book/dtos/book-request-dto.ts"
 
 export class BookRepository extends BaseRepository<BookSchema> {
   constructor(em: EntityManager) {
-    super(em, BookSchema);
+    super(em, BookSchema, (id) => ({ id }));
+  }
+
+  getLibraryReference(id: string): Ref<LibrarySchema> {
+    return this.em.getReference(LibrarySchema, id);
+  }
+
+  getUserReference(id: string): Ref<UserSchema> {
+    return this.em.getReference(UserSchema, id);
   }
 
   async createBook(req: CreateBookRequest): Promise<BookSchema> {
@@ -17,8 +26,8 @@ export class BookRepository extends BaseRepository<BookSchema> {
 
     return await this.create({
       id: req.id ?? crypto.randomUUID(),
-      library: this.em.getReference(LibrarySchema, req.libraryId),
-      user: this.em.getReference(UserSchema, req.userId),
+      library: this.getLibraryReference(req.libraryId),
+      user: this.getUserReference(req.userId),
       title: req.title,
       author: req.author,
       lastAccessedAt: req.lastAccessedAt

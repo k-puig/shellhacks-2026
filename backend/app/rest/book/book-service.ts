@@ -5,11 +5,13 @@ import type {
   CreateBookRequest,
   DeleteBookRequest,
   FetchBookRequest,
+  UpdateBookRequest,
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import type {
   CreateBookBaseResponse,
   DeleteBookBaseResponse,
   FetchBookBaseResponse,
+  UpdateBookBaseResponse,
 } from "@app/rest/book/dtos/book-response-dto.ts";
 import { BookRepository } from "@app/rest/book/book-repository.ts";
 import { BookSchema } from "@package/database/schema/postgresql-schema/index.ts";
@@ -47,6 +49,37 @@ export class BookService {
     }
 
     return await createBaseResponse(200, "Book fetched", toBookContent(book));
+  }
+
+  async updateBook(req: UpdateBookRequest): Promise<UpdateBookBaseResponse> {
+    const book = await this.bookRepository.findById(req.id);
+
+    if (!book) {
+      throw new BaseError(404, "Book not found");
+    }
+
+    book.library = req.libraryId
+      ? this.bookRepository.getLibraryReference(req.libraryId)
+      : book.library;
+    book.user = req.userId
+      ? this.bookRepository.getUserReference(req.userId)
+      : book.user;
+    book.title = req.title ?? book.title;
+    book.author = req.author ?? book.author;
+    book.lastAccessedAt = req.lastAccessedAt === undefined
+      ? book.lastAccessedAt
+      : req.lastAccessedAt === null
+      ? undefined
+      : new Date(req.lastAccessedAt);
+    book.progress = req.progress === undefined
+      ? book.progress
+      : req.progress === null
+      ? undefined
+      : BigInt(req.progress);
+
+    await this.bookRepository.flush();
+
+    return await createBaseResponse(200, "Book updated", toBookContent(book));
   }
 
   async deleteBook(req: DeleteBookRequest): Promise<DeleteBookBaseResponse> {

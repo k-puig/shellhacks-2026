@@ -1,3 +1,4 @@
+import type { Ref } from "@mikro-orm/core";
 import type { EntityManager } from "@mikro-orm/postgresql";
 import { BaseRepository } from "@app/rest/lib/base-class/base-repository.ts";
 import {
@@ -8,7 +9,11 @@ import type { CreateHighlightRequest } from "@app/rest/highlight/dtos/highlight-
 
 export class HighlightRepository extends BaseRepository<HighlightSchema> {
   constructor(em: EntityManager) {
-    super(em, HighlightSchema);
+    super(em, HighlightSchema, (id) => ({ id }));
+  }
+
+  getBookReference(id: string): Ref<BookSchema> {
+    return this.em.getReference(BookSchema, id);
   }
 
   async createHighlight(
@@ -18,7 +23,7 @@ export class HighlightRepository extends BaseRepository<HighlightSchema> {
 
     return await this.create({
       id: req.id ?? crypto.randomUUID(),
-      book: this.em.getReference(BookSchema, req.bookId),
+      book: this.getBookReference(req.bookId),
       start: req.start,
       end: req.end,
       createdAt: now,

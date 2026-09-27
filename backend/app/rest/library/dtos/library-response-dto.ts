@@ -6,12 +6,28 @@ export const libraryContentZObj = z.object({
   name: z.string(),
 });
 
-export const createLibraryBaseResponseZObj = baseResponseZObj(libraryContentZObj);
-export const fetchLibraryBaseResponseZObj = baseResponseZObj(libraryContentZObj);
+export const createLibraryBaseResponseZObj = baseResponseZObj(
+  libraryContentZObj,
+);
+export const fetchLibraryBaseResponseZObj = baseResponseZObj(
+  libraryContentZObj,
+);
+export const updateLibraryBaseResponseZObj = baseResponseZObj(
+  libraryContentZObj,
+);
 export const deleteLibraryBaseResponseZObj = baseResponseZObj(
   z.object({ id: z.uuidv4() }),
 );
 
-export type CreateLibraryBaseResponse = z.infer<typeof createLibraryBaseResponseZObj>;
-export type FetchLibraryBaseResponse = z.infer<typeof fetchLibraryBaseResponseZObj>;
-export type DeleteLibraryBaseResponse = z.infer<typeof deleteLibraryBaseResponseZObj>;
+export type CreateLibraryBaseResponse = z.infer<
+  typeof createLibraryBaseResponseZObj
+>;
+export type FetchLibraryBaseResponse = z.infer<
+  typeof fetchLibraryBaseResponseZObj
+>;
+export type UpdateLibraryBaseResponse = z.infer<
+  typeof updateLibraryBaseResponseZObj
+>;
+export type DeleteLibraryBaseResponse = z.infer<
+  typeof deleteLibraryBaseResponseZObj
+>;

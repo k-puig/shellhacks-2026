@@ -1,8 +1,10 @@
-export class BaseError extends Error{
-   public code: number;
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-   constructor(code: number, message: string | null ){
-     super(message ?? "Something went wrong");
-     this.code = code;
+export class BaseError extends Error {
+  public code: ContentfulStatusCode;
+
+  constructor(code: ContentfulStatusCode, message: string | null) {
+    super(message ?? "Something went wrong");
+    this.code = code;
   }
 }
