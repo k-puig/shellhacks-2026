@@ -7,6 +7,7 @@ export const bookContentZObj = z.object({
   userId: z.uuidv4(),
   title: z.string(),
   author: z.string(),
+  s3Key: z.string(),
   lastAccessedAt: z.string().datetime().nullable(),
   progress: z.number().nullable(),
 });

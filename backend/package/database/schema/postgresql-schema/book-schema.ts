@@ -18,6 +18,9 @@ export class BookSchema extends BaseSchema {
   @Property({ type: "string" })
   author!: string;
 
+  @Property({ type: "string" })
+  s3Key!: string;
+
   @Property({ type: "date", nullable: true })
   lastAccessedAt?: Date;
 

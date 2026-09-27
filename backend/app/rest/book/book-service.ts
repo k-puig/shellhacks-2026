@@ -15,6 +15,7 @@ import type {
 } from "@app/rest/book/dtos/book-response-dto.ts";
 import { BookRepository } from "@app/rest/book/book-repository.ts";
 import { BookSchema } from "@package/database/schema/postgresql-schema/index.ts";
+import { S3Client } from "@package/s3/client.ts";
 
 function toBookContent(book: BookSchema) {
   return {
@@ -23,6 +24,7 @@ function toBookContent(book: BookSchema) {
     userId: book.user.id,
     title: book.title,
     author: book.author,
+    s3Key: book.s3Key,
     lastAccessedAt: book.lastAccessedAt?.toISOString() ?? null,
     progress: book.progress === undefined ? null : Number(book.progress),
   };
@@ -30,13 +32,27 @@ function toBookContent(book: BookSchema) {
 
 export class BookService {
   private readonly bookRepository: BookRepository;
+  private readonly s3Client: S3Client;
 
   constructor(em: EntityManager) {
     this.bookRepository = new BookRepository(em);
+    this.s3Client = new S3Client();
   }
 
   async createBook(req: CreateBookRequest): Promise<CreateBookBaseResponse> {
-    const book = await this.bookRepository.createBook(req);
+    const id = req.id ?? crypto.randomUUID();
+    const s3Key = `books/${req.userId}/${id}.epub`;
+
+    await this.s3Client.uploadBook({
+      key: s3Key,
+      book: req.book,
+    });
+
+    const book = await this.bookRepository.createBook({
+      ...req,
+      id,
+      s3Key,
+    });
 
     return await createBaseResponse(201, "Book created", toBookContent(book));
   }
@@ -83,6 +99,14 @@ export class BookService {
   }
 
   async deleteBook(req: DeleteBookRequest): Promise<DeleteBookBaseResponse> {
+    const book = await this.bookRepository.findById(req.id);
+
+    if (!book) {
+      throw new BaseError(404, "Book not found");
+    }
+
+    await this.s3Client.deleteBook({ key: book.s3Key });
+
     const wasDeleted = await this.bookRepository.deleteById(req.id);
 
     if (!wasDeleted) {

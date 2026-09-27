@@ -11,10 +11,16 @@ export function createBookRouter(bookService: BookService): Hono {
   const book = new Hono();
 
   book.post("/", async (c) => {
-    const parsed = await createBookRequestZObj.safeParseAsync(await c.req.json());
+    const parsed = await createBookRequestZObj.safeParseAsync(
+      await c.req.parseBody(),
+    );
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid book request", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid book request",
+        content: parsed.error.issues,
+      });
     }
 
     const response = await bookService.createBook(parsed.data);
@@ -27,7 +33,11 @@ export function createBookRouter(bookService: BookService): Hono {
     });
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid book id", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid book id",
+        content: parsed.error.issues,
+      });
     }
 
     try {
@@ -35,7 +45,11 @@ export function createBookRouter(bookService: BookService): Hono {
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        });
       }
 
       throw error;
@@ -48,7 +62,11 @@ export function createBookRouter(bookService: BookService): Hono {
     });
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid book id", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid book id",
+        content: parsed.error.issues,
+      });
     }
 
     try {
@@ -56,7 +74,11 @@ export function createBookRouter(bookService: BookService): Hono {
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        });
       }
 
       throw error;
