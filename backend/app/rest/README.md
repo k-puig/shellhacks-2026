@@ -3,11 +3,43 @@
 Hono on Deno; Postgres stores records and RustFS stores uploaded files. Routes
 are under `/api/v1`.
 
+## Run
+
+**Full stack with Docker** (API, website, nginx, RustFS; this is how `dodo.gay` runs). From the repo root, with the settings below in a root `.env` (git-ignored):
+
 ```bash
-# From backend/app/rest
-deno task start
-deno check main.ts
+docker compose up -d --build                             # production: uses an external Postgres (POSTGRES_* settings)
+docker compose -f docker-compose.yml.local up -d --build # local: also starts a Postgres container
+docker compose logs dodo-rest --tail 100                 # errors are logged as "<METHOD> <path> failed: …"
 ```
+
+Rebuild (`--build`) after backend changes: a plain restart keeps the old image.
+
+On startup the API creates any missing tables (safe schema update, nothing dropped) and the `epub`/`pfp` buckets.
+
+**API only, with Deno 2.9+** (needs a reachable Postgres and RustFS):
+
+```bash
+cd backend
+deno task rest                      # deno run --allow-sys --allow-net --allow-env app/rest/main.ts
+deno check app/rest/main.ts         # type-check (must report no errors)
+deno lint
+RUSTFS_ACCESS_KEY=test RUSTFS_SECRET_KEY=test deno test --allow-env app/rest   # unit tests (dummy keys are enough)
+```
+
+`--allow-sys` is required: the AWS S3 SDK reads the OS version on every call, and without it all uploads fail with "Requires sys access".
+
+**Settings** (environment variables; never commit them):
+
+| Variable | What it is |
+|---|---|
+| `AUTH0_DOMAIN` | `dodocall.us.auth0.com`, with no `https://` |
+| `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET` | The website's Auth0 application |
+| `AUTH0_API_AUDIENCE` | Identifier of the Auth0 API (`https://dodo.gay/`). Must equal the mobile app's `EXPO_PUBLIC_AUTH0_AUDIENCE`; without it every mobile request gets 401 |
+| `BASE_URL` | Public site URL, e.g. `https://dodo.gay` |
+| `SESSION_SECRET`, `COOKIE_SECRET` | Random secrets for the website session |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Database (compose passes them to the API as `PGSQL_*`) |
+| `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY` | RustFS (S3) credentials |
 
 ## Auth0 setup
 
