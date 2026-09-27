@@ -13,7 +13,7 @@ export class HighlightRepository extends BaseRepository<HighlightSchema> {
   }
 
   getBookReference(id: string): Ref<BookSchema> {
-    return this.em.getReference(BookSchema, id);
+    return this.em.getReference(BookSchema, id, { wrapped: true });
   }
 
   async createHighlight(

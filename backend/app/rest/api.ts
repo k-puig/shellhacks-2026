@@ -11,7 +11,10 @@ import { UserService } from "@app/rest/user/user-service.ts";
 import { connectPostgresqlDatabase } from "@package/database/config/postgresql-config.ts";
 
 const orm = await connectPostgresqlDatabase();
-await orm.schema.refresh(); // Clear db if schema doesn't match, then regenerate
+await orm.schema.update({
+  safe: true, // disables destructive changes (table/column drops) [^dc3387#30-31]
+  dropTables: false, // don't drop unknown tables
+});
 
 const api = new Hono();
 const em = orm.em.fork();

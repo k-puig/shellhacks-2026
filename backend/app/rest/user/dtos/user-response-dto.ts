@@ -30,7 +30,7 @@ export const deleteUserBaseResponseZObj = baseResponseZObj(
 export const changeUserProfilePictureBaseResponseZObj = baseResponseZObj(
   z.object({
     id: z.uuidv4(),
-    newProfilePicture: z.string(), //TODO: truly determine what this datatype will be
+    key: z.string()
   }),
 );
 

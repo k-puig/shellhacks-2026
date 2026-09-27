@@ -1,5 +1,10 @@
 import * as z from "@zod/zod";
 
+const optionalFormNumber = z.string()
+  .regex(/^\d+$/)
+  .transform((value) => Number(value))
+  .optional();
+
 export const createBookRequestZObj = z.object({
   id: z.uuidv4().optional(),
   libraryId: z.uuidv4(),
@@ -7,7 +12,14 @@ export const createBookRequestZObj = z.object({
   title: z.string(),
   author: z.string(),
   lastAccessedAt: z.string().datetime().optional(),
-  progress: z.number().int().nonnegative().optional(),
+  progress: optionalFormNumber,
+  book: z.instanceof(File)
+    .refine(
+      (file) =>
+        file.name.toLowerCase().endsWith(".epub") ||
+        file.type === "application/epub+zip",
+      "Book upload must be an .epub file",
+    ),
 });
 
 export const fetchBookRequestZObj = z.object({
