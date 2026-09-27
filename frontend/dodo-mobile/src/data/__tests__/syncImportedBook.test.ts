@@ -2,6 +2,13 @@ import type { Book } from '../mockBooks';
 import { loadRemoteBookIds, saveRemoteBookId } from '../remoteBookIds';
 import { syncImportedBook } from '../syncImportedBook';
 
+// expo-file-system's File is native; in tests a Blob stands in for the picked file.
+jest.mock('expo-file-system', () => ({
+  File: function MockFile() {
+    return new Blob(['epub bytes'], { type: 'application/epub+zip' });
+  },
+}));
+
 jest.mock('../remoteBookIds', () => ({
   loadRemoteBookIds: jest.fn(),
   saveRemoteBookId: jest.fn(),

@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import type { Book } from '@/data/mockBooks';
 
 import type { ApiClient } from './client';
@@ -31,7 +33,9 @@ export async function uploadBook(api: ApiClient, book: Book, fileUri: string, li
   if (libraryId) form.append('libraryId', libraryId);
   form.append('title', book.title);
   form.append('author', book.author);
-  // React Native uploads a local file given its uri, name and type.
-  form.append('book', { uri: fileUri, name: `${book.id}.epub`, type: 'application/epub+zip' } as unknown as Blob);
+  // Expo's fetch (SDK 57) uploads real file objects only; the old React Native
+  // { uri, name, type } part fails with "Unsupported FormDataPart implementation".
+  // expo-file-system's File is a Blob pointing at the picked file on the phone.
+  form.append('book', new File(fileUri), `${book.id}.epub`);
   return await api<RemoteBook>('/book', { method: 'POST', body: form });
 }

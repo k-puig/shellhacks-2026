@@ -2,6 +2,13 @@ import type { Book } from '@/data/mockBooks';
 
 import { listBooks, updateBookProgress, uploadBook } from '../books';
 
+// expo-file-system's File is native; in tests a Blob stands in for the picked file.
+jest.mock('expo-file-system', () => ({
+  File: function MockFile() {
+    return new Blob(['epub bytes'], { type: 'application/epub+zip' });
+  },
+}));
+
 const book: Book = {
   id: '6f1c2b1e-5c1a-4b7e-9d2a-1c3e5f7a9b0d',
   title: 'Frankenstein',
@@ -48,5 +55,15 @@ describe('uploadBook', () => {
       method: 'PATCH',
       body: { position: 47 },
     });
+  });
+});
+
+describe('uploadBook file part', () => {
+  it('attaches the picked file as a real file named <id>.epub (not a { uri } object)', async () => {
+    const api = jest.fn(async (_path: string, _init?: { body?: FormData }) => ({ id: 'remote-id' }));
+    await uploadBook(api as never, book, 'file:///cache/frankenstein.epub');
+    const part = api.mock.calls[0][1]?.body?.get('book') as File;
+    expect(part).toBeInstanceOf(Blob);
+    expect(part.name).toBe(`${book.id}.epub`);
   });
 });
