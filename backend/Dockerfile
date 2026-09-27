@@ -11,5 +11,8 @@ ARG VITE_AUTH0_DOMAIN
 ARG VITE_AUTH0_CLIENT_ID
 RUN deno run build
 
+WORKDIR /app/app/splash
+RUN deno run build
+
 WORKDIR /app
 CMD ["deno", "run", "rest"]
