@@ -133,7 +133,7 @@ export default function HomeScreen() {
               </Text>
               <Text style={styles.author}>{current.author}</Text>
               <ProgressBar value={progressOf(current)} />
-              <Text style={styles.hint}>Say “Hey DODO, keep reading”</Text>
+              <Text style={styles.hint}>Say “Hey Nova, keep reading”</Text>
             </View>
           </Pressable>
 

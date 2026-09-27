@@ -2,7 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { colors } from '@/theme';
 
-// Everything you can say after "Hey DODO" (or after tapping the mic).
+// Everything you can say after "Hey Nova" (or after tapping the mic).
 const GROUPS: { title: string; commands: [string, string][] }[] = [
   {
     title: 'Playback',
@@ -42,7 +42,7 @@ export function CommandsSheet({ visible, onClose }: { visible: boolean; onClose:
             <Text style={styles.done}>Done</Text>
           </Pressable>
         </View>
-        <Text style={styles.hint}>Start with “Hey DODO”, or tap the mic, then say:</Text>
+        <Text style={styles.hint}>Start with “Hey Nova”, or tap the mic, then say:</Text>
 
         <ScrollView contentContainerStyle={styles.content}>
           {GROUPS.map((group) => (

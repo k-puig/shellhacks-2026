@@ -15,7 +15,7 @@
           "audio"
         ],
         "NSSpeechRecognitionUsageDescription": "DODO turns your voice commands into actions like highlighting and notes.",
-        "NSMicrophoneUsageDescription": "DODO listens for \"Hey DODO\" so you can control your book hands-free."
+        "NSMicrophoneUsageDescription": "DODO listens for \"Hey Nova\" so you can control your book hands-free."
       },
       "appleTeamId": "A4A5WJGF36"
     },
@@ -54,7 +54,7 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "DODO listens for \"Hey DODO\" so you can control your book hands-free.",
+          "microphonePermission": "DODO listens for \"Hey Nova\" so you can control your book hands-free.",
           "speechRecognitionPermission": "DODO turns your voice commands into actions like highlighting and notes."
         }
       ],

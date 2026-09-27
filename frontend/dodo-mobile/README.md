@@ -70,18 +70,18 @@ On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, Air
 
 ## Voice commands
 
-Say **"Hey DODO"**, pause for a moment, then give the command. For example: `pause`, `play`, `go back`, `skip`, `next chapter`, `faster`, `slower`, `highlight that`, `highlight that in blue`, `note …`, or a question like `who is …?`. The full list is in Settings.
+Say **"Hey Nova"**, pause for a moment, then give the command. For example: `pause`, `play`, `go back`, `skip`, `next chapter`, `faster`, `slower`, `highlight that`, `highlight that in blue`, `note …`, or a question like `who is …?`. The full list is in Settings.
 
-The wake phrase needs "Hey" (or "Hi"/"OK"): books say "dodo" on their own. The narrator plays next to the mic, so hold the phone closer to you than to the speaker, or lower the volume. If iOS's recognizer goes silent for 15 seconds while a book plays, the listener restarts it (the stall watchdog in `src/voice/useWakeWord.ts`).
+"Hey"/"Hi"/"OK" + "Nova" works anywhere, as do run-together mishearings like "hangover" or "Hanover". A plain "Nova" only counts at the start of what you say ("Nova, pause"), since books say "Nova" mid-sentence. iOS echo cancellation is on, so the mic barely hears the narrator even through the phone speaker. If iOS's recognizer goes silent for 15 seconds while a book plays, the listener restarts it (the stall watchdog in `src/voice/useWakeWord.ts`).
 
 **With the screen locked or another app open:** while a book is being narrated, DODO keeps listening, and keeps going for 2 minutes after a pause. iOS shows its orange mic dot while it does. Currently **one command works per trip out of the app**:
 - After each command, the listener ends its speech session and starts a new one, to clear what it already heard.
 - iOS lets a background app keep a recording that's already running, but won't let it *start* a new one, so that restart is refused (`audio-capture`, OSStatus `!int`).
 - Opening the app starts listening again.
 
-For best results in the background: stay in the app a few seconds before leaving, speak close to the phone, and say "Hey DODO" in a gap in the narration.
+For best results in the background: stay in the app a few seconds before leaving, speak close to the phone, and say "Hey Nova" in a gap in the narration.
 
-Next steps: keep one session running in the background and skip past handled words instead of restarting, and try iOS echo cancellation, so the narrator doesn't drown out the wake phrase.
+Next steps: keep one session running in the background and skip past handled words instead of restarting.
 
 ## Checks
 
@@ -94,7 +94,7 @@ npx tsc --noEmit && npm run lint && npm test
 - **App closes immediately on the phone:** the installed build is stale or missing a permission key. Rebuild with `npx expo run:ios --device`.
 - **Stuck on "Searching for development servers":** phone and Mac aren't on the same network, or Metro isn't running. Enter `http://<mac-lan-ip>:8081` manually.
 - **Narration or questions error out:** the ElevenLabs or Gemini key is missing from `.env.local`. Restart Metro with `-c` after adding it.
-- **Wake word missed:** pause briefly after "Hey DODO" before the command, and speak louder than the narrator.
+- **Wake word missed:** pause briefly after "Hey Nova" before the command, and speak louder than the narrator.
 - **`pod install` fails with "Unicode Normalization not appropriate for ASCII-8BIT":** the terminal has no UTF-8 locale. Run `export LANG=en_US.UTF-8`, or add it to `~/.zshrc`.
 - **The narrator keeps playing after "pause", or two voices play:** a hot reload happened during playback. Force-quit and reopen the app.
 - **"Account books unavailable" / "Account sync failed":** log out and back in. If that doesn't help, the backend's `AUTH0_API_AUDIENCE` must equal `EXPO_PUBLIC_AUTH0_AUDIENCE` (see `backend/app/rest/README.md`).

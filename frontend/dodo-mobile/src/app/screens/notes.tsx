@@ -66,7 +66,7 @@ export default function NotesScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Nothing saved yet</Text>
                 <Text style={styles.emptyBody}>
-                  While listening, say “Hey DODO, highlight that” or “Hey DODO, write a note…”
+                  While listening, say “Hey Nova, highlight that” or “Hey Nova, write a note…”
                 </Text>
               </View>
             ) : (
@@ -100,7 +100,7 @@ export default function NotesScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>No questions yet</Text>
                 <Text style={styles.emptyBody}>
-                  While listening, ask “Hey DODO, why is the Rabbit in such a hurry?” and the answer
+                  While listening, ask “Hey Nova, why is the Rabbit in such a hurry?” and the answer
                   will be saved here.
                 </Text>
               </View>
