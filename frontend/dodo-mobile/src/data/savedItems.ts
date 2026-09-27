@@ -31,9 +31,16 @@ const QUESTION: Fields = {
   askedAt: 'string',
 };
 
-// Keeps the entries of a saved list that have every field; drops the rest.
-function validList<T>(list: unknown, fields: Fields): T[] {
-  return Array.isArray(list) ? (list.filter((item) => hasFields(item, fields)) as T[]) : [];
+// Both lists, with each id only once (the first copy wins).
+export function mergeById<T extends { id: string }>(first: T[], second: T[]): T[] {
+  const seen = new Set<string>();
+  return [...first, ...second].filter((item) => !seen.has(item.id) && seen.add(item.id));
+}
+
+// Keeps the entries of a saved list that have every field, each id once;
+// drops the rest.
+function validList<T extends { id: string }>(list: unknown, fields: Fields): T[] {
+  return Array.isArray(list) ? mergeById(list.filter((item) => hasFields(item, fields)) as T[], []) : [];
 }
 
 // Reads the saved file's contents; a missing or corrupted file means nothing

@@ -15,7 +15,7 @@ import { mockBooks, type AskedQuestion, type Book, type Highlight, type Note } f
 import { loadPositions, savePositions } from './progressFile';
 import { withoutBook, withPosition, type Positions } from './readingProgress';
 import { loadSavedItems, saveSavedItems } from './savedFile';
-import type { Saved } from './savedItems';
+import { mergeById, type Saved } from './savedItems';
 
 type LibraryState = {
   // Added books first (newest first), then the built-in samples.
@@ -84,11 +84,13 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   }, [positions, positionsLoaded]);
 
   // Saved items go first; anything added while the file was loading stays.
+  // Merged by id: in development, a hot reload re-runs this with the items
+  // already in memory, which must not duplicate them.
   useEffect(() => {
     loadSavedItems().then((saved) => {
-      setHighlights((added) => [...saved.highlights, ...added]);
-      setNotes((added) => [...saved.notes, ...added]);
-      setAskedQuestions((added) => [...saved.askedQuestions, ...added]);
+      setHighlights((added) => mergeById(saved.highlights, added));
+      setNotes((added) => mergeById(saved.notes, added));
+      setAskedQuestions((added) => mergeById(saved.askedQuestions, added));
       setSavedLoaded(true);
     });
   }, []);

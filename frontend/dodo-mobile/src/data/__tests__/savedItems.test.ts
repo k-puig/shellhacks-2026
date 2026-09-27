@@ -1,4 +1,4 @@
-import { emptySavedItems, parseSavedItems, type SavedItems } from '../savedItems';
+import { emptySavedItems, mergeById, parseSavedItems, type SavedItems } from '../savedItems';
 
 const items: SavedItems = {
   highlights: [{ id: 'h1', bookId: 'b', startIdx: 3, endIdx: 9, color: '#E3A548' }],
@@ -39,10 +39,26 @@ describe('parseSavedItems', () => {
     expect(parseSavedItems(json)).toEqual(items);
   });
 
+  it('drops repeated ids (cleans files saved with duplicates)', () => {
+    const json = JSON.stringify({ ...items, notes: [...items.notes, ...items.notes] });
+    expect(parseSavedItems(json)).toEqual(items);
+  });
+
   it('treats a missing list as empty', () => {
     expect(parseSavedItems(JSON.stringify({ notes: items.notes }))).toEqual({
       ...emptySavedItems(),
       notes: items.notes,
     });
+  });
+});
+
+describe('mergeById', () => {
+  it('keeps the first copy of each id and adds the new ones', () => {
+    const a = { id: 'a', v: 1 };
+    expect(mergeById([a, { id: 'b', v: 1 }], [{ id: 'a', v: 2 }, { id: 'c', v: 1 }])).toEqual([
+      a,
+      { id: 'b', v: 1 },
+      { id: 'c', v: 1 },
+    ]);
   });
 });
