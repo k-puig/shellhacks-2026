@@ -1,22 +1,34 @@
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import Animated, {
+  ReduceMotion,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 import { ActionButton, type ActionState } from '@/components/ActionButton';
+import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
-import { getBook, type Book, type Paragraph } from '@/data/mockBooks';
+import { useSettings } from '@/data/settingsStore';
+import { chapterIndexAt, nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
+import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
 import {
@@ -25,13 +37,119 @@ import {
   recentSentences,
   splitSentences,
 } from '@/voice/geminiInterpreter';
-import { parseCommand, type Command } from '@/voice/parseCommand';
+import { answerQuestion, resumePoint } from '@/ai/askDodo';
+import { isNarratorEcho } from '@/voice/narratorEcho';
+import { isBareHighlight, parseCommand, type Command } from '@/voice/parseCommand';
 import { useWakeWord } from '@/voice/useWakeWord';
 
 // Height of the floating iOS tab bar above the home-indicator inset.
 const TAB_BAR_HEIGHT = 56;
 // Room the floating controls take, so the last paragraph can scroll above them.
 const DOCK_HEIGHT = 110;
+// How far the controls drop while scrolling down, alongside the tab bar
+// minimizing; small enough to clear the minimized tab bar pill.
+const DOCK_DROP = 40;
+// Scroll movement smaller than this doesn't change the controls' position.
+const SCROLL_JITTER = 8;
+const DOCK_SPRING = { damping: 22, stiffness: 220, reduceMotion: ReduceMotion.System };
+// Autoscroll glides for moves this many rows or fewer; farther jumps snap.
+const NEARBY_ROWS = 3;
+// Answer text stays in the status line this long.
+const ANSWER_DISPLAY_MS = 12_000;
+// With no touches for this long, only the play button stays on screen.
+const IDLE_HIDE_MS = 3000;
+const FADE = { duration: 220, reduceMotion: ReduceMotion.System };
+
+// A dock button that fades and shrinks away while the reader is idle.
+function IdleFade({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: withTiming(visible ? 1 : 0, FADE),
+    transform: [{ scale: withTiming(visible ? 1 : 0.85, FADE) }],
+  }));
+  return (
+    <Animated.View style={[styles.sideButton, style]} pointerEvents={visible ? 'auto' : 'none'}>
+      {children}
+    </Animated.View>
+  );
+}
+
+type Saved<T> = T & { bookId: string };
+type NoteRange = { note: Saved<Note>; startIdx: number; endIdx: number };
+
+// The reader is a virtualized list of these rows for the chapter being read,
+// so only what's near the screen exists even for a full-length book.
+type Row =
+  | { kind: 'chapter'; key: string; title: string }
+  | { kind: 'paragraph'; key: string; paragraph: Paragraph }
+  | { kind: 'next'; key: string; title: string };
+
+// One paragraph of words. Memoized: `readUpTo` is -1 before the paragraph is
+// reached and Infinity once it's read, so only the paragraph being read
+// re-renders as narration moves.
+const ParagraphRow = memo(function ParagraphRow({
+  paragraph,
+  readUpTo,
+  highlights,
+  notes,
+  noteRanges,
+  selectedId,
+  onWordPress,
+  onWordLongPress,
+  onNoteMarkPress,
+}: {
+  paragraph: Paragraph;
+  readUpTo: number;
+  highlights: Saved<Highlight>[];
+  notes: Saved<Note>[];
+  noteRanges: NoteRange[];
+  selectedId: string | undefined;
+  onWordPress: (idx: number) => void;
+  onWordLongPress: (paragraph: Paragraph, idx: number) => void;
+  onNoteMarkPress: (id: string) => void;
+}) {
+  const first = paragraph.words[0].idx;
+  const last = paragraph.words[paragraph.words.length - 1].idx;
+  const mine = <T extends { startIdx: number; endIdx: number }>(xs: T[]) =>
+    xs.filter((x) => x.endIdx >= first && x.startIdx <= last);
+  const rowHighlights = mine(highlights);
+  const rowNoteRanges = mine(noteRanges);
+  const rowNotes = notes.filter((n) => n.wordIdx >= first && n.wordIdx <= last);
+
+  return (
+    <Text style={styles.paragraph}>
+      {paragraph.words.map((w) => {
+        const highlight = rowHighlights.find((h) => w.idx >= h.startIdx && w.idx <= h.endIdx);
+        const note = rowNotes.find((n) => n.wordIdx === w.idx);
+        const noted = rowNoteRanges.find((r) => w.idx >= r.startIdx && w.idx <= r.endIdx)?.note;
+        return (
+          <Text
+            key={w.idx}
+            onPress={() => onWordPress(w.idx)}
+            onLongPress={() => onWordLongPress(paragraph, w.idx)}
+            style={[
+              w.idx < readUpTo && styles.spoken,
+              highlight && styles.highlighted,
+              highlight && { backgroundColor: withAlpha(highlight.color, 0.28) },
+              highlight && highlight.id === selectedId && styles.selected,
+              noted && styles.noted,
+              noted && noted.id === selectedId && styles.notedSelected,
+              w.idx === readUpTo && styles.current,
+            ]}>
+            {w.text}
+            {note && (
+              <Text
+                onPress={() => onNoteMarkPress(note.id)}
+                style={[styles.noteMark, note.id === selectedId && styles.noteMarkSelected]}>
+                {' '}
+                ✎
+              </Text>
+            )}{' '}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+});
 
 // Book text uses a serif; Georgia ships with iOS, "serif" maps to Noto Serif on Android.
 const READING_FONT = Platform.select({ ios: 'Georgia', default: 'serif' });
@@ -69,9 +187,16 @@ export default function ReaderScreen() {
 function Reader({ book }: { book: Book }) {
   const narration = useNarration(book);
   const library = useLibrary();
+  const { settings, loaded: settingsLoaded } = useSettings();
   const insets = useSafeAreaInsets();
-  const highlights = library.highlights.filter((h) => h.bookId === book.id);
-  const notes = library.notes.filter((n) => n.bookId === book.id);
+  const highlights = useMemo(
+    () => library.highlights.filter((h) => h.bookId === book.id),
+    [library.highlights, book.id],
+  );
+  const notes = useMemo(
+    () => library.notes.filter((n) => n.bookId === book.id),
+    [library.notes, book.id],
+  );
 
   const [feedback, setFeedback] = useState('');
   // Word the note being typed is attached to; null when the composer is closed.
@@ -85,13 +210,28 @@ function Reader({ book }: { book: Book }) {
   );
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const wasPlaying = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where narration resumes after an answer: the sentence being read when the
+  // listener said "Hey DODO" or tapped the mic.
+  const resumeFrom = useRef<number | null>(null);
+  // Bumped per question so a slow answer can't play over a newer one.
+  const askSession = useRef(0);
+  // The answer being spoken, so the mic ignores DODO's own voice too.
+  const answerEcho = useRef('');
 
-  const say = (message: string) => {
+  // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
+  // (Both off when haptics are turned off in Settings.)
+  const buzzWake = () => {
+    if (settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  const buzzDone = () => {
+    if (settings.haptics) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const say = (message: string, ms = 2500) => {
     setFeedback(message);
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => setFeedback(''), 2500);
+    feedbackTimer.current = setTimeout(() => setFeedback(''), ms);
   };
 
   const paragraphOf = (idx: number) =>
@@ -103,7 +243,7 @@ function Reader({ book }: { book: Book }) {
   // asking for a color on an existing highlight recolors it instead of stacking.
   const addHighlight = (
     range: { startIdx: number; endIdx: number },
-    colorName: HighlightColorName = 'yellow',
+    colorName: HighlightColorName = settings.highlightColor,
   ) => {
     const color = HIGHLIGHT_COLORS[colorName];
     const existing = highlights.find(
@@ -118,7 +258,7 @@ function Reader({ book }: { book: Book }) {
       return;
     }
     library.addHighlight({ bookId: book.id, ...range, color });
-    say(colorName === 'yellow' ? 'Highlighted' : `Highlighted in ${colorName}`);
+    say(colorName === settings.highlightColor ? 'Highlighted' : `Highlighted in ${colorName}`);
   };
 
   const addNote = (wordIdx: number, content: string) => {
@@ -126,7 +266,7 @@ function Reader({ book }: { book: Book }) {
     say(`Noted: “${content}”`);
   };
 
-  const words = narration.paragraphs.flatMap((p) => p.words);
+  const words = useMemo(() => narration.paragraphs.flatMap((p) => p.words), [narration.paragraphs]);
   const sentences = useMemo(() => splitSentences(narration.paragraphs), [narration.paragraphs]);
   const contextBefore = (idx: number) =>
     words
@@ -224,11 +364,13 @@ function Reader({ book }: { book: Book }) {
     const idx = narration.currentIdxRef.current;
     switch (command.type) {
       case 'pause':
+        narration.pause();
         say('Paused');
-        return false;
+        break;
       case 'play':
+        if (!narration.isPlaying) narration.play();
         say('Playing');
-        return true;
+        break;
       case 'highlight':
         addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
         break;
@@ -241,13 +383,13 @@ function Reader({ book }: { book: Book }) {
         break;
       case 'repeat': {
         const p = paragraphOf(idx);
-        narration.seek(sentenceAround(p, idx).startIdx, false);
+        narration.seek(sentenceAround(p, idx).startIdx, narration.isPlaying);
         say('Going back');
         break;
       }
       case 'skip': {
         const next = narration.paragraphs[narration.paragraphs.indexOf(paragraphOf(idx)) + 1];
-        if (next) narration.seek(next.words[0].idx, false);
+        if (next) narration.seek(next.words[0].idx, narration.isPlaying);
         say('Skipping ahead');
         break;
       }
@@ -255,14 +397,14 @@ function Reader({ book }: { book: Book }) {
         const next = chapterStarts.find((s) => s > idx);
         if (next === undefined) say('This is the last chapter');
         else {
-          narration.seek(next, false);
+          narration.seek(next, narration.isPlaying);
           say('Next chapter');
         }
         break;
       }
       case 'previousChapter': {
         const current = chapterStarts.filter((s) => s <= idx).length - 1;
-        narration.seek(chapterStarts[Math.max(0, current - 1)], false);
+        narration.seek(chapterStarts[Math.max(0, current - 1)], narration.isPlaying);
         say('Previous chapter');
         break;
       }
@@ -276,29 +418,72 @@ function Reader({ book }: { book: Book }) {
         break;
       case 'unknown':
         say(`Didn't catch that: “${command.heard}”`);
-        break;
+        return false;
+      case 'question':
+        say('Add EXPO_PUBLIC_GEMINI_API_KEY to ask questions');
+        return false;
     }
-    return wasPlaying.current;
+    return true;
   };
 
   // Highlight / note / unrecognized commands go to Gemini, which reads the
   // recent sentences and decides exactly what to save. Narration resumes right
   // away; the result lands when Gemini answers. Falls back to the simple rules
   // (sentence just read, note at current word) if the request fails.
+  // Ask DODO: Gemini answers from the book so far; the answer is saved, shown,
+  // and spoken over the ducked narrator, which then resumes where they asked.
+  const ask = (question: string) => {
+    const mySession = ++askSession.current;
+    const idx = narration.currentIdxRef.current;
+    const resume = resumeFrom.current ?? resumePoint(sentences, idx);
+    narration.duck();
+    setFeedback('Thinking…');
+
+    answerQuestion(question, book, idx)
+      .then(({ answer, title }) => {
+        if (askSession.current !== mySession) return;
+        library.addAskedQuestion({
+          bookId: book.id,
+          wordIdx: idx,
+          question,
+          answer,
+          title,
+          askedAt: new Date().toISOString(),
+        });
+        buzzDone();
+        answerEcho.current = answer;
+        say(answer, ANSWER_DISPLAY_MS);
+        narration
+          .speakAside(answer, resume)
+          .catch((error) => console.log('[dodo] Answer audio failed:', String(error)));
+      })
+      .catch((error) => {
+        if (askSession.current !== mySession) return;
+        console.log('[dodo] Ask DODO failed:', String(error));
+        narration.unduck();
+        say("Couldn't answer that right now");
+      });
+  };
+
   const understand = (text: string, command: Command) => {
+    // A newer "Hey DODO" makes a late "answer" result stale.
+    const mySession = askSession.current;
     const idx = narration.currentIdxRef.current;
     const context = recentSentences(sentences, idx);
     setFeedback('Thinking…');
-    if (wasPlaying.current) narration.play();
 
     interpretCommand(text, context, words)
       .then((result) => {
         if (result.action === 'highlight') {
           addHighlight({ startIdx: result.startIdx, endIdx: result.endIdx }, result.color);
           say(result.reply);
+          buzzDone();
         } else if (result.action === 'note') {
           library.addNote({ bookId: book.id, wordIdx: result.wordIdx, content: result.content });
           say(result.reply);
+          buzzDone();
+        } else if (result.action === 'answer') {
+          if (askSession.current === mySession) ask(text);
         } else {
           say(result.reply);
         }
@@ -307,140 +492,345 @@ function Reader({ book }: { book: Book }) {
         console.log('[dodo] Gemini failed, using fallback:', String(error));
         if (command.type === 'highlight') {
           addHighlight(sentenceAround(paragraphOf(idx), idx), command.color);
-        }
-        else if (command.type === 'note' && command.content) addNote(idx, command.content);
-        else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
+          buzzDone();
+        } else if (command.type === 'note' && command.content) {
+          addNote(idx, command.content);
+          buzzDone();
+        } else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
         else say(`Didn't catch that: “${text}”`);
       });
   };
 
+  // The book around the word being read: what the mic hears from the narrator.
+  const nearbyNarration = () => {
+    const idx = narration.currentIdxRef.current;
+    const at = sentences.findIndex((s) => idx >= s.startIdx && idx <= s.endIdx);
+    return sentences
+      .slice(Math.max(0, at - 2), at + 3)
+      .map((s) => s.text)
+      .join(' ');
+  };
+
+  // The narrator keeps playing while DODO listens, just quieter.
   const voice = useWakeWord({
     onWake: () => {
-      wasPlaying.current = narration.isPlaying;
-      narration.pause();
+      buzzWake();
+      // A new "Hey DODO" interrupts an answer (the narrator rewinds first).
+      askSession.current++;
+      // Drop a stale "Thinking…" or previous answer so "Listening…" shows.
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      setFeedback('');
+      if (narration.isSpeakingAside) narration.stopAside();
+      resumeFrom.current = resumePoint(sentences, narration.currentIdxRef.current);
+      narration.duck();
     },
     onCommand: (text) => {
       const command = parseCommand(text);
+      // Questions keep the book ducked through the answer.
+      if (command.type === 'question' && isGeminiConfigured()) {
+        ask(command.text);
+        return;
+      }
+      narration.unduck();
+      // "Highlight that" is done here right away; describing what to
+      // highlight ("the part about…"), notes, and anything else go to Gemini.
       const needsUnderstanding =
-        command.type === 'highlight' || command.type === 'note' || command.type === 'unknown';
+        (command.type === 'highlight' && !isBareHighlight(text)) ||
+        command.type === 'note' ||
+        command.type === 'unknown';
       if (needsUnderstanding && isGeminiConfigured()) {
         understand(text, command);
         return;
       }
-      if (run(command)) narration.play();
+      if (run(command)) buzzDone();
     },
     onCancel: () => {
-      if (wasPlaying.current) narration.play();
+      narration.unduck();
+    },
+    // Not until saved settings load, so a saved "off" never briefly turns the mic on.
+    alwaysListen: settingsLoaded && settings.wakeWord,
+    ignore: (text) =>
+      isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
+  });
+
+  // The reader's list, for autoscrolling to the paragraph being read.
+  const scroll = useRef<FlatList<Row>>(null);
+
+  // Controls drop once when scrolling down (as the tab bar minimizes) and stay
+  // down: scrolling back up doesn't bounce them, only returning to the top does.
+  const lastScrollY = useSharedValue(0);
+  const dockDown = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      const y = e.contentOffset.y;
+      if (y <= 0) {
+        dockDown.value = 0;
+        lastScrollY.value = 0;
+      } else if (y - lastScrollY.value > SCROLL_JITTER) {
+        dockDown.value = 1;
+      }
+      if (y > 0) lastScrollY.value = Math.min(lastScrollY.value, y);
     },
   });
 
-  // Keep the paragraph being read on screen, hands-free.
-  const scroll = useRef<ScrollView>(null);
-  // onLayout y is relative to the parent, so keep chapter offsets and paragraph
-  // offsets (within their chapter) and add them to get a scroll position.
-  const chapterY = useRef<Record<number, number>>({});
-  const paragraphY = useRef<Record<number, { chapterIdx: number; y: number }>>({});
-  const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
+  // Highlight, mic and note hide after a few seconds without a touch; play
+  // stays. They stay up while DODO is listening or something is selected.
+  const [touchedRecently, setTouchedRecently] = useState(true);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onTouch = () => {
+    setTouchedRecently(true);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setTouchedRecently(false), IDLE_HIDE_MS);
+  };
   useEffect(() => {
-    const entry = paragraphY.current[activeParagraph];
-    if (!entry) return;
-    const y = (chapterY.current[entry.chapterIdx] ?? 0) + entry.y;
-    scroll.current?.scrollTo({ y: Math.max(0, y - 120), animated: true });
-  }, [activeParagraph]);
-
-  const highlightAt = (idx: number) => highlights.find((h) => idx >= h.startIdx && idx <= h.endIdx);
-  const noteAt = (idx: number) => notes.find((n) => n.wordIdx === idx);
-  // Each note underlines the sentence it's attached to.
-  const noteRanges = notes.map((n) => ({
-    note: n,
-    ...sentenceContaining(paragraphOf(n.wordIdx), n.wordIdx),
+    idleTimer.current = setTimeout(() => setTouchedRecently(false), IDLE_HIDE_MS);
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+  }, []);
+  const showSideButtons =
+    touchedRecently || voice.status === 'awake' || narration.isSpeakingAside || selected !== null;
+  const dockStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: withSpring(dockDown.value * DOCK_DROP, DOCK_SPRING) }],
   }));
-  const notedAt = (idx: number) =>
-    noteRanges.find((r) => idx >= r.startIdx && idx <= r.endIdx)?.note;
+  // One chapter at a time: the one containing the word being read. Jumping
+  // anywhere swaps chapters and snaps to the spot, instead of the list
+  // estimating its way through thousands of unmeasured paragraphs.
+  const shownChapter = chapterIndexAt(book, narration.currentIdx);
+  const rows = useMemo<Row[]>(() => {
+    const c = book.chapters[shownChapter];
+    const next = book.chapters[shownChapter + 1];
+    return [
+      { kind: 'chapter' as const, key: `c${c.chapterIdx}`, title: c.title },
+      ...c.paragraphs.map((p) => ({
+        kind: 'paragraph' as const,
+        key: `p${p.paragraphIdx}`,
+        paragraph: p,
+      })),
+      ...(next ? [{ kind: 'next' as const, key: 'next', title: next.title }] : []),
+    ];
+  }, [book, shownChapter]);
+  const rowOfParagraph = useMemo(
+    () =>
+      new Map(
+        rows.flatMap((r, i) =>
+          r.kind === 'paragraph' ? [[r.paragraph.paragraphIdx, i] as const] : [],
+        ),
+      ),
+    [rows],
+  );
+
+  // Keep the paragraph being read on screen, hands-free: glide along with
+  // narration, but snap straight there for a jump (chapter, contents, seek),
+  // instead of animating through everything in between.
+  const activeParagraph = paragraphOf(narration.currentIdx).paragraphIdx;
+  const lastScrollRow = useRef<number | null>(null);
+  const lastScrollChapter = useRef(shownChapter);
+  const scrollAnimated = useRef(false);
+  useEffect(() => {
+    const index = rowOfParagraph.get(activeParagraph);
+    if (index === undefined) return;
+    // A new chapter is a fresh list: snap.
+    const from = lastScrollChapter.current === shownChapter ? lastScrollRow.current : null;
+    lastScrollChapter.current = shownChapter;
+    scrollAnimated.current = from !== null && Math.abs(index - from) <= NEARBY_ROWS;
+    lastScrollRow.current = index;
+    scroll.current?.scrollToIndex({ index, viewPosition: 0.15, animated: scrollAnimated.current });
+    // shownChapter always changes together with rowOfParagraph.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeParagraph, rowOfParagraph]);
+
+  // Each note underlines the sentence it's attached to.
+  const noteRanges = useMemo(
+    () =>
+      notes.map((n) => ({
+        note: n,
+        ...sentenceContaining(paragraphOf(n.wordIdx), n.wordIdx),
+      })),
+    // paragraphOf only reads the book's paragraphs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [notes, narration.paragraphs],
+  );
+
+  const onPreviousChapter = () =>
+    narration.seek(
+      previousChapterTarget(book, narration.currentIdxRef.current),
+      narration.isPlaying,
+    );
+  const onNextChapter = () => {
+    const next = nextChapterStart(book, narration.currentIdxRef.current);
+    if (next === null) say('This is the last chapter');
+    else narration.seek(next, narration.isPlaying);
+  };
+
+  // Stable handlers for the memoized rows; the latest versions live in a ref.
+  const rowHandlers = useRef({ onWordPress, onNoteMarkPress, addHighlight, onNextChapter: () => {} });
+  useEffect(() => {
+    rowHandlers.current = { onWordPress, onNoteMarkPress, addHighlight, onNextChapter };
+  });
+  const onRowWordPress = useCallback((idx: number) => rowHandlers.current.onWordPress(idx), []);
+  const onRowWordLongPress = useCallback(
+    (paragraph: Paragraph, idx: number) =>
+      rowHandlers.current.addHighlight(sentenceContaining(paragraph, idx)),
+    [],
+  );
+  const onRowNoteMarkPress = useCallback(
+    (id: string) => rowHandlers.current.onNoteMarkPress(id),
+    [],
+  );
+
+  const readUpTo = (p: Paragraph) => {
+    const current = narration.currentIdx;
+    if (current < p.words[0].idx) return -1;
+    if (current > p.words[p.words.length - 1].idx) return Infinity;
+    return current;
+  };
+
+  const renderRow = ({ item }: { item: Row }) =>
+    item.kind === 'chapter' ? (
+      <Text style={styles.chapterTitle}>{item.title}</Text>
+    ) : item.kind === 'next' ? (
+      <Pressable
+        style={styles.nextChapter}
+        onPress={() => rowHandlers.current.onNextChapter()}
+        accessibilityRole="button"
+        accessibilityLabel={`Next chapter: ${item.title}`}>
+        <Text style={styles.nextChapterLabel}>Next chapter</Text>
+        <Text style={styles.nextChapterTitle} numberOfLines={2}>
+          {item.title} →
+        </Text>
+      </Pressable>
+    ) : (
+      <ParagraphRow
+        paragraph={item.paragraph}
+        readUpTo={readUpTo(item.paragraph)}
+        highlights={highlights}
+        notes={notes}
+        noteRanges={noteRanges}
+        selectedId={selected?.id}
+        onWordPress={onRowWordPress}
+        onWordLongPress={onRowWordLongPress}
+        onNoteMarkPress={onRowNoteMarkPress}
+      />
+    );
+
+  const [showContents, setShowContents] = useState(false);
+
+  // Pick up where the listener left off (paused), once saved positions load.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !library.positionsLoaded) return;
+    restored.current = true;
+    const saved = library.positions[book.id];
+    if (saved) narration.seek(saved.lastIdx, false);
+    // Runs once per book, when positions become available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library.positionsLoaded]);
+
+  // Save the spot as each paragraph starts and whenever narration pauses.
+  // Skipped once after a reset, so moving back to the start isn't saved as progress.
+  const skipNextSave = useRef(false);
+  useEffect(() => {
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    if (restored.current) library.setPosition(book.id, narration.currentIdxRef.current);
+    // library.setPosition only updates state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeParagraph, narration.isPlaying]);
+
 
   const statusLabel = {
     starting: 'Starting microphone…',
     listening: 'Say “Hey DODO”',
+    idle: 'Tap the mic to talk',
     awake: voice.heard ? `“${voice.heard}”` : 'Listening…',
     denied: 'Microphone access denied, enable it in Settings',
     error: `Voice unavailable (${voice.errorDetail}), tap to retry`,
   }[voice.status];
 
+  // Command feedback first, then narration problems, then the mic's state.
+  const message = feedback || narration.error;
+
+
+  // Keep filtering DODO's voice for a moment after it stops talking.
+  useEffect(() => {
+    if (narration.isSpeakingAside) return;
+    const t = setTimeout(() => (answerEcho.current = ''), 2000);
+    return () => clearTimeout(t);
+  }, [narration.isSpeakingAside]);
+
+  // Mic: idle → listen; listening → end the turn; answering → stop the answer.
+  const onMicPress = () => {
+    if (narration.isSpeakingAside) narration.stopAside();
+    else if (voice.status === 'awake') voice.endTurn();
+    else if (voice.status === 'error') voice.retry();
+    else voice.wake();
+  };
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
-      <Text style={styles.bookTitle} numberOfLines={1}>
-        {book.title}
-      </Text>
+    <SafeAreaView style={styles.screen} edges={['top']} onTouchStart={onTouch}>
+      {/* Tap the title for the table of contents. */}
+      <Pressable
+        style={styles.titleButton}
+        onPress={() => setShowContents(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${book.title}, contents`}>
+        <Text style={styles.bookTitle} numberOfLines={1}>
+          {book.title}
+        </Text>
+        <SymbolView
+          name={{ ios: 'list.bullet', android: 'list', web: 'list' }}
+          tintColor={colors.textSecondary}
+          size={15}
+        />
+      </Pressable>
 
       {/* Turns off iOS 26's blur band under the tab bar so text runs to the bottom edge. */}
       <ScrollViewMarker scrollEdgeEffects={{ bottom: 'hidden' }} style={styles.fill}>
-        <ScrollView
+        <Animated.FlatList
+          // A fresh list per chapter, starting at its top.
+          key={shownChapter}
           ref={scroll}
+          data={rows}
+          keyExtractor={(row: Row) => row.key}
+          renderItem={renderRow}
+          // Re-run renderItem as narration moves; memoized rows skip the work.
+          extraData={[narration.currentIdx, highlights, notes, noteRanges, selected]}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          onScrollToIndexFailed={(info) => {
+            // Rows far away haven't been measured yet: jump near, then settle.
+            scroll.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: false,
+            });
+            setTimeout(
+              () =>
+                scroll.current?.scrollToIndex({
+                  index: info.index,
+                  viewPosition: 0.15,
+                  animated: scrollAnimated.current,
+                }),
+              50,
+            );
+          }}
           contentContainerStyle={[
             styles.content,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + DOCK_HEIGHT },
-          ]}>
-          {book.chapters.map((chapter) => (
-            <View
-              key={chapter.chapterIdx}
-              onLayout={(e) => (chapterY.current[chapter.chapterIdx] = e.nativeEvent.layout.y)}>
-              <Text style={styles.chapterTitle}>{chapter.title}</Text>
-              {chapter.paragraphs.map((p) => (
-                <Text
-                  key={p.paragraphIdx}
-                  style={styles.paragraph}
-                  onLayout={(e) =>
-                    (paragraphY.current[p.paragraphIdx] = {
-                      chapterIdx: chapter.chapterIdx,
-                      y: e.nativeEvent.layout.y,
-                    })
-                  }>
-                  {p.words.map((w) => {
-                    const highlight = highlightAt(w.idx);
-                    const note = noteAt(w.idx);
-                    const noted = notedAt(w.idx);
-                    return (
-                      <Text
-                        key={w.idx}
-                        onPress={() => onWordPress(w.idx)}
-                        onLongPress={() => addHighlight(sentenceContaining(p, w.idx))}
-                        style={[
-                          w.idx < narration.currentIdx && styles.spoken,
-                          highlight && styles.highlighted,
-                          highlight && { backgroundColor: withAlpha(highlight.color, 0.28) },
-                          highlight && highlight.id === selected?.id && styles.selected,
-                          noted && styles.noted,
-                          noted && noted.id === selected?.id && styles.notedSelected,
-                          w.idx === narration.currentIdx && styles.current,
-                        ]}>
-                        {w.text}
-                        {note && (
-                          <Text
-                            onPress={() => onNoteMarkPress(note.id)}
-                            style={[
-                              styles.noteMark,
-                              note.id === selected?.id && styles.noteMarkSelected,
-                            ]}>
-                            {' '}
-                            ✎
-                          </Text>
-                        )}{' '}
-                      </Text>
-                    );
-                  })}
-                </Text>
-              ))}
-            </View>
-          ))}
-        </ScrollView>
+          ]}
+        />
       </ScrollViewMarker>
 
       {/* Floats over the text so the glass controls show the page through them. */}
-      <View
-        style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }]}
+      <Animated.View
+        style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }, dockStyle]}
         pointerEvents="box-none">
         {/* Only shown when there's something to say; idle listening stays silent. */}
-        {(feedback || voice.status !== 'listening') && (
+        {(message || (voice.status !== 'listening' && voice.status !== 'idle')) && (
           <Pressable
             onPress={voice.status === 'error' ? voice.retry : undefined}
             style={styles.status}>
@@ -448,25 +838,22 @@ function Reader({ book }: { book: Book }) {
             <Text
               style={[styles.statusText, voice.status === 'awake' && styles.statusTextAwake]}
               numberOfLines={2}>
-              {feedback || statusLabel}
+              {message || statusLabel}
             </Text>
           </Pressable>
         )}
 
+        {/* Play stays at the bottom left; everything else fades when idle. */}
         <View style={styles.controls}>
-          <View style={styles.sideButton}>
-            <ActionButton
-              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
-              state={buttonState('highlight', highlightTarget)}
-              onPress={onHighlightButton}
-              accessibilityLabel="Highlight the sentence just read"
-            />
-          </View>
-
           <Pressable
             style={styles.playButton}
             accessibilityLabel={narration.isPlaying ? 'Pause' : 'Play'}
-            onPress={() => (narration.isPlaying ? narration.pause() : narration.play())}>
+            onPress={() => {
+              // During an answer: stop it, then do what the button shows.
+              if (narration.isSpeakingAside) narration.stopAside(false);
+              if (narration.isPlaying) narration.pause();
+              else narration.play();
+            }}>
             <SymbolView
               name={
                 narration.isPlaying
@@ -478,16 +865,84 @@ function Reader({ book }: { book: Book }) {
             />
           </Pressable>
 
-          <View style={styles.sideButton}>
+          <IdleFade visible={showSideButtons}>
+            <Pressable
+              style={styles.chapterButton}
+              hitSlop={6}
+              onPress={onPreviousChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Previous chapter">
+              <SymbolView
+                name={{ ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' }}
+                tintColor={colors.text}
+                size={22}
+              />
+            </Pressable>
+          </IdleFade>
+
+          <IdleFade visible={showSideButtons}>
+            <Pressable
+              style={styles.chapterButton}
+              hitSlop={6}
+              onPress={onNextChapter}
+              accessibilityRole="button"
+              accessibilityLabel="Next chapter">
+              <SymbolView
+                name={{ ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' }}
+                tintColor={colors.text}
+                size={22}
+              />
+            </Pressable>
+          </IdleFade>
+
+          <IdleFade visible={showSideButtons}>
+            <ActionButton
+              icon={{ ios: 'highlighter', android: 'ink_highlighter', web: 'ink_highlighter' }}
+              state={buttonState('highlight', highlightTarget)}
+              onPress={onHighlightButton}
+              accessibilityLabel="Highlight the sentence just read"
+            />
+          </IdleFade>
+
+          {/* Same as saying "Hey DODO", for when the room is too loud. */}
+          <IdleFade visible={showSideButtons}>
+            <ActionButton
+              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
+              state="idle"
+              onPress={onMicPress}
+              active={voice.status === 'awake' || narration.isSpeakingAside}
+              accessibilityLabel="Give DODO a voice command"
+            />
+          </IdleFade>
+
+          <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' }}
               state={buttonState('note', noteTarget)}
               onPress={onNoteButton}
               accessibilityLabel="Write a note here"
             />
-          </View>
+          </IdleFade>
         </View>
-      </View>
+      </Animated.View>
+
+      <ContentsSheet
+        visible={showContents}
+        book={book}
+        position={library.positions[book.id]}
+        onClose={() => setShowContents(false)}
+        onSelect={(idx) => {
+          setShowContents(false);
+          narration.seek(idx, narration.isPlaying);
+        }}
+        onReset={() => {
+          setShowContents(false);
+          skipNextSave.current = true;
+          narration.pause();
+          narration.seek(book.chapters[0].paragraphs[0].words[0].idx, false);
+          library.clearPosition(book.id);
+        }}
+      />
 
       <Modal
         visible={noteAnchor !== null}
@@ -598,7 +1053,25 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.textSecondary },
   dotAwake: { backgroundColor: colors.accent },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
-  sideButton: { width: 88, alignItems: 'center' },
+  sideButton: { width: 56, alignItems: 'center' },
+  nextChapter: {
+    marginTop: 28,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    gap: 4,
+  },
+  nextChapterLabel: { color: colors.textSecondary, fontSize: 13 },
+  nextChapterTitle: { color: colors.accent, fontSize: 17, fontWeight: '600' },
+  chapterButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  titleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 40,
+  },
   playButton: {
     width: 60,
     height: 60,

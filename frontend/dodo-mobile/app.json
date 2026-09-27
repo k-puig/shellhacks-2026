@@ -38,6 +38,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-dev-client",
+        {
+          "launchMode": "launcher"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#15131C",
@@ -52,7 +58,9 @@
           "speechRecognitionPermission": "DODO turns your voice commands into actions like highlighting and notes."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset",
+      "./plugins/withIosSceneLifecycle"
     ],
     "experiments": {
       "typedRoutes": true,

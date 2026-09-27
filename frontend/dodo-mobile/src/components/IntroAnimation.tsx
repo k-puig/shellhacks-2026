@@ -1,40 +1,88 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withSpring,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 
+import { body, brandStyles, K, leg, TAGLINE } from '@/components/BrandMark';
 import { colors } from '@/theme';
 
-// Artwork is drawn on a 220×200 grid (see assets/images/dodo); K scales it on screen.
-const K = 0.85;
-const STEP_MS = 170; // one waddle step
+const WORD = 'dodo';
 
-const body = require('../../assets/images/dodo/body.svg');
-const leg = require('../../assets/images/dodo/leg.svg');
+// Strong ease-out: quick to arrive, gentle to settle.
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+// Falling speeds up, like gravity.
+const FALL = Easing.in(Easing.quad);
 
-// Launch intro: the dodo appears, bobs, waddles off to the right, then the
-// overlay fades to reveal Home (already rendered underneath). Tap to skip.
+// Timeline (ms). The dodo walks in, an egg drops on its head, then the wordmark.
+const MARK_MS = 420;
+const WALK_MS = 900;
+const WALK_DISTANCE = 56;
+const STEP_MS = 150;
+const EGG_DROP_AT = 1050;
+const EGG_FALL_MS = 360;
+const LETTER_DELAY_MS = 1600;
+const LETTER_STAGGER_MS = 60;
+const LETTER_MS = 420;
+const LINE_DELAY_MS = 1800;
+const LINE_MS = 620;
+const HOLD_UNTIL_MS = 2900;
+const FADE_OUT_MS = 320;
+// Reduce Motion: fades only, no walk or egg.
+const CALM = { letterDelay: 180, lineDelay: 380, holdUntil: 1250 };
+
+// Where the egg lands: the top of the head in body.svg (x 150, top y 26).
+const HEAD_X = 150 * K;
+const HEAD_TOP = 26 * K;
+const EGG_W = 30 * K;
+const EGG_H = 38 * K;
+const EGG_START_Y = -240;
+
+const egg = require('../../assets/images/dodo/egg.svg');
+
+function Letter({ char, progress, reduceMotion }: {
+  char: string;
+  progress: SharedValue<number>;
+  reduceMotion: boolean;
+}) {
+  const style = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 6 }],
+  }));
+  return <Animated.Text style={[brandStyles.wordmark, style]}>{char}</Animated.Text>;
+}
+
+// Launch intro: the dodo walks in, an egg bonks it on the head, then the
+// wordmark resolves over a thin amber rule and the overlay fades to reveal
+// Home (already rendered underneath). Tap to skip.
 export function IntroAnimation({ onDone }: { onDone: () => void }) {
-  const { width } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
 
-  const appear = useSharedValue(0);
-  const x = useSharedValue(0);
-  const tilt = useSharedValue(0);
+  const mark = useSharedValue(0);
+  const walkX = useSharedValue(reduceMotion ? 0 : -WALK_DISTANCE);
   const bob = useSharedValue(0);
+  const tilt = useSharedValue(0);
+  const squashX = useSharedValue(1);
+  const squashY = useSharedValue(1);
   const legA = useSharedValue(0);
   const legB = useSharedValue(0);
-  const wordmark = useSharedValue(0);
+  const eggY = useSharedValue(EGG_START_Y);
+  const eggX = useSharedValue(0);
+  const eggSpin = useSharedValue(0);
+  const eggOpacity = useSharedValue(0);
+  const letters = [useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0)];
+  const line = useSharedValue(0);
   const overlay = useSharedValue(1);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -44,51 +92,82 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
     if (finished.current) return;
     finished.current = true;
     timers.current.forEach(clearTimeout);
-    overlay.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) });
-    timers.current = [setTimeout(onDone, 340)];
+    overlay.value = withTiming(0, { duration: FADE_OUT_MS, easing: EASE_OUT });
+    timers.current = [setTimeout(onDone, FADE_OUT_MS + 20)];
   };
 
   useEffect(() => {
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
+    const t = (ms: number) => ({ duration: reduceMotion ? 240 : ms, easing: EASE_OUT });
+    const letterDelay = reduceMotion ? CALM.letterDelay : LETTER_DELAY_MS;
 
-    // 1. Appear with a soft spring, wordmark just after.
-    appear.value = withSpring(1, { damping: 14, stiffness: 140 });
-    wordmark.value = withTiming(1, { duration: 400 });
+    mark.value = withTiming(1, t(MARK_MS));
+    letters.forEach((l, i) => {
+      l.value = withDelay(letterDelay + i * LETTER_STAGGER_MS, withTiming(1, t(LETTER_MS)));
+    });
+    line.value = withDelay(reduceMotion ? CALM.lineDelay : LINE_DELAY_MS, withTiming(1, t(LINE_MS)));
 
     if (reduceMotion) {
-      at(900, finish);
+      at(CALM.holdUntil, finish);
       return () => timers.current.forEach(clearTimeout);
     }
 
-    // 2. A curious head bob.
-    at(550, () => {
+    // 1. Walk in: legs alternate, a small bob and rock with each step.
+    const step = { duration: STEP_MS, easing: Easing.inOut(Easing.sin) };
+    const steps = WALK_MS / (2 * STEP_MS);
+    walkX.value = withTiming(0, { duration: WALK_MS, easing: Easing.out(Easing.quad) });
+    legA.value = withRepeat(withSequence(withTiming(1, step), withTiming(0, step)), steps);
+    legB.value = withDelay(
+      STEP_MS,
+      withRepeat(withSequence(withTiming(1, step), withTiming(0, step)), steps),
+    );
+    bob.value = withRepeat(
+      withSequence(withTiming(-3, { duration: STEP_MS / 2 }), withTiming(0, { duration: STEP_MS / 2 })),
+      steps * 2,
+    );
+    tilt.value = withSequence(
+      withRepeat(withSequence(withTiming(-3, step), withTiming(3, step)), steps),
+      withTiming(0, { duration: 120 }),
+    );
+
+    // 2. An egg drops from above...
+    eggOpacity.value = withDelay(EGG_DROP_AT, withTiming(1, { duration: 60 }));
+    // 3. ...and the moment it lands (on the animation thread, so it's always
+    // on the head, never early), bonk: the dodo squashes and wobbles and the
+    // egg bounces off, spinning away.
+    const bonk = (landed?: boolean) => {
+      'worklet';
+      if (!landed) return;
+      squashY.value = withSequence(
+        withTiming(0.9, { duration: 70 }),
+        withSpring(1, { damping: 9, stiffness: 280 }),
+      );
+      squashX.value = withSequence(
+        withTiming(1.06, { duration: 70 }),
+        withSpring(1, { damping: 9, stiffness: 280 }),
+      );
       tilt.value = withSequence(
-        withTiming(-6, { duration: 160 }),
-        withTiming(3, { duration: 160 }),
-        withTiming(0, { duration: 140 }),
+        withTiming(-8, { duration: 90 }),
+        withSpring(0, { damping: 7, stiffness: 200 }),
       );
-    });
+      eggX.value = withTiming(52, { duration: 580 });
+      eggSpin.value = withTiming(220, { duration: 580 });
+      eggOpacity.value = withDelay(420, withTiming(0, { duration: 160 }));
+    };
+    eggY.value = withDelay(
+      EGG_DROP_AT,
+      withSequence(
+        withTiming(0, { duration: EGG_FALL_MS, easing: FALL }, bonk),
+        withTiming(-36, { duration: 200, easing: EASE_OUT }),
+        withTiming(130, { duration: 380, easing: FALL }),
+      ),
+    );
 
-    // 3. Waddle off: rock side to side, bounce each step, alternate legs.
-    at(1100, () => {
-      const step = { duration: STEP_MS, easing: Easing.inOut(Easing.sin) };
-      tilt.value = withRepeat(withSequence(withTiming(-7, step), withTiming(7, step)), -1, true);
-      bob.value = withRepeat(
-        withSequence(withTiming(-7, { duration: STEP_MS / 2 }), withTiming(0, { duration: STEP_MS / 2 })),
-        -1,
-      );
-      legA.value = withRepeat(withSequence(withTiming(1, step), withTiming(0, step)), -1);
-      legB.value = withRepeat(withSequence(withTiming(0, step), withTiming(1, step)), -1);
-      wordmark.value = withTiming(0, { duration: 300 });
-      x.value = withTiming(width / 2 + 200, { duration: 1500, easing: Easing.in(Easing.quad) });
-    });
-
-    // 4. Once it's off screen, reveal Home.
-    at(2500, finish);
+    at(HOLD_UNTIL_MS, finish);
 
     return () => {
       timers.current.forEach(clearTimeout);
-      [tilt, bob, legA, legB, x].forEach(cancelAnimation);
+      [walkX, bob, tilt, squashX, squashY, legA, legB, eggY, eggX, eggSpin].forEach(cancelAnimation);
     };
     // Runs once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,12 +175,13 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
 
   const overlayStyle = useAnimatedStyle(() => ({ opacity: overlay.value }));
   const birdStyle = useAnimatedStyle(() => ({
-    opacity: appear.value,
+    opacity: mark.value,
     transform: [
-      { translateX: x.value },
-      { translateY: bob.value + (1 - appear.value) * 12 },
+      { translateX: walkX.value },
+      { translateY: bob.value },
       { rotate: `${tilt.value}deg` },
-      { scale: 0.85 + 0.15 * appear.value },
+      { scaleX: squashX.value },
+      { scaleY: squashY.value },
     ],
   }));
   // Legs swing from the hip and lift slightly on their step.
@@ -111,26 +191,49 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   const legBStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -5 * legB.value }, { rotate: `${-14 * legB.value}deg` }],
   }));
-  const wordmarkStyle = useAnimatedStyle(() => ({
-    opacity: wordmark.value,
-    transform: [{ translateY: (1 - wordmark.value) * 8 }],
+  const eggStyle = useAnimatedStyle(() => ({
+    opacity: eggOpacity.value,
+    transform: [
+      { translateX: eggX.value },
+      { translateY: eggY.value },
+      { rotate: `${eggSpin.value}deg` },
+    ],
+  }));
+  const lineStyle = useAnimatedStyle(() => ({
+    opacity: reduceMotion ? line.value : 1,
+    transform: reduceMotion ? [] : [{ scaleX: line.value }],
   }));
 
   return (
     <Animated.View style={[styles.overlay, overlayStyle]}>
-      <Pressable style={styles.center} onPress={finish} accessibilityLabel="Skip intro">
-        <Animated.View style={[styles.bird, birdStyle]}>
-          <Animated.View style={[styles.leg, { left: 82 * K }, legBStyle]}>
-            <Image source={leg} style={styles.fill} />
-          </Animated.View>
-          <Animated.View style={[styles.leg, { left: 110 * K }, legAStyle]}>
-            <Image source={leg} style={styles.fill} />
-          </Animated.View>
-          <Image source={body} style={styles.body} />
-        </Animated.View>
-        <Animated.View style={wordmarkStyle}>
-          <Text style={styles.wordmark}>dodo</Text>
-        </Animated.View>
+      <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityLabel="Skip intro">
+        {/* Same layout as the welcome screen's BrandMark, so the hand-off doesn't jump. */}
+        <View style={brandStyles.layer}>
+          <View style={brandStyles.stage}>
+            <Animated.View style={[brandStyles.bird, styles.bird, birdStyle]}>
+              <Animated.View style={[brandStyles.leg, brandStyles.legB, legBStyle]}>
+                <Image source={leg} style={brandStyles.fill} />
+              </Animated.View>
+              <Animated.View style={[brandStyles.leg, brandStyles.legA, legAStyle]}>
+                <Image source={leg} style={brandStyles.fill} />
+              </Animated.View>
+              <Image source={body} style={brandStyles.body} />
+            </Animated.View>
+            {!reduceMotion && (
+              <Animated.View style={[styles.egg, eggStyle]}>
+                <Image source={egg} style={brandStyles.fill} />
+              </Animated.View>
+            )}
+          </View>
+          <View style={brandStyles.word} accessible accessibilityLabel={WORD}>
+            {WORD.split('').map((char, i) => (
+              <Letter key={i} char={char} progress={letters[i]} reduceMotion={reduceMotion} />
+            ))}
+          </View>
+          <Animated.View style={[brandStyles.line, lineStyle]} />
+          {/* Holds the tagline's space (it appears on the welcome screen). */}
+          <Text style={[brandStyles.tagline, styles.hidden]}>{TAGLINE}</Text>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -146,10 +249,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     zIndex: 10,
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18 },
-  bird: { width: 220 * K, height: 200 * K },
-  body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
-  leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K, transformOrigin: 'top' },
-  fill: { width: '100%', height: '100%' },
-  wordmark: { color: colors.text, fontSize: 34, fontWeight: '700', letterSpacing: -1 },
+  // Squashes from the feet when the egg lands.
+  bird: { transformOrigin: 'bottom' },
+  // Contact position: bottom edge just into the top of the head (HEAD_TOP).
+  egg: {
+    position: 'absolute',
+    left: HEAD_X - EGG_W / 2,
+    top: HEAD_TOP - EGG_H + 4,
+    width: EGG_W,
+    height: EGG_H,
+  },
+  hidden: { opacity: 0 },
 });

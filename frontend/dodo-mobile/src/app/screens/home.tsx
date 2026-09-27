@@ -7,6 +7,7 @@ import { ScrollViewMarker } from 'react-native-screens/experimental';
 import { BookCover } from '@/components/BookCover';
 import { useLibrary } from '@/data/libraryStore';
 import { getBook, mockBooks, type Book } from '@/data/mockBooks';
+import { bookProgress } from '@/data/readingProgress';
 import { colors } from '@/theme';
 
 function ProgressBar({ value }: { value: number }) {
@@ -18,7 +19,9 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export default function HomeScreen() {
-  const { currentBookId, openBook } = useLibrary();
+  const { currentBookId, openBook, positions } = useLibrary();
+  // Real listening progress, from the furthest point reached in each book.
+  const progressOf = (book: Book) => bookProgress(book, positions[book.id]?.furthestIdx ?? -1);
   const current = getBook(currentBookId);
 
   const open = (book: Book) => {
@@ -54,7 +57,7 @@ export default function HomeScreen() {
                 {current.title}
               </Text>
               <Text style={styles.author}>{current.author}</Text>
-              <ProgressBar value={current.progress} />
+              <ProgressBar value={progressOf(current)} />
               <Text style={styles.hint}>Say “Hey DODO, keep reading”</Text>
             </View>
           </Pressable>
@@ -70,7 +73,7 @@ export default function HomeScreen() {
                 <Text style={styles.author} numberOfLines={1}>
                   {book.author}
                 </Text>
-                <ProgressBar value={book.progress} />
+                <ProgressBar value={progressOf(book)} />
               </Pressable>
             ))}
           </View>

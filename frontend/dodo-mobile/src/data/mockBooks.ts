@@ -1,3 +1,5 @@
+import { buildLibrary } from './library';
+
 // Mock data — delete once the epub-service returns real tokenized books.
 // Shape follows the brief: word `idx` is global across the whole book.
 
@@ -18,6 +20,18 @@ export type Book = {
 
 export type Highlight = { id: string; startIdx: number; endIdx: number; color: string };
 export type Note = { id: string; wordIdx: number; content: string };
+
+// A question the listener asked DODO about the book, with its spoken answer.
+export type AskedQuestion = {
+  id: string;
+  wordIdx: number;
+  question: string;
+  answer: string;
+  // Short label for the Notes tab, e.g. "Why the Rabbit is late".
+  title: string;
+  // ISO timestamp.
+  askedAt: string;
+};
 
 function tokenize(
   meta: Omit<Book, 'chapters'>,
@@ -43,7 +57,7 @@ const gutenbergCover = (id: number) =>
   `https://www.gutenberg.org/cache/epub/${id}/pg${id}.cover.medium.jpg`;
 
 // All excerpts are public domain.
-export const mockBooks: Book[] = [
+const sampleBooks: Book[] = [
   tokenize({ id: 'alice', title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll', coverColor: '#6B4E8C', coverUrl: gutenbergCover(11), progress: 0.12 }, [
     {
       title: 'Chapter I: Down the Rabbit-Hole',
@@ -91,6 +105,22 @@ export const mockBooks: Book[] = [
     },
   ]),
 ];
+
+// Full-length books converted locally from EPUBs with scripts/epub_to_book.py.
+// They're git-ignored (copyrighted test material), so this require is
+// optional: without them the library is just the sample books above.
+function loadConvertedBooks(): Book[] {
+  try {
+    // Optional on purpose: a missing folder must not break the build.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require('./generated') as { generatedBooks: Book[] }).generatedBooks;
+  } catch {
+    return [];
+  }
+}
+
+// Every converted book, then the samples.
+export const mockBooks: Book[] = buildLibrary(loadConvertedBooks(), sampleBooks);
 
 export function getBook(id: string | undefined): Book {
   return mockBooks.find((b) => b.id === id) ?? mockBooks[0];

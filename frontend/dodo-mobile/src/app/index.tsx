@@ -1,21 +1,17 @@
-import { Redirect } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
-
-import { useAuth } from "../auth/useAuth";
+import { Redirect } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
+import { SKIP_LOGIN } from '@/auth/config';
+import { useAuth } from '@/auth/AuthProvider';
 
 export default function Index() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Local testing only (see src/auth/config.ts).
+  if (SKIP_LOGIN) return <Redirect href="/screens/home" />;
+
   if (isLoading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#15131C",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <View style={{ flex: 1, backgroundColor: '#15131C', justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#E3A548" />
       </View>
     );

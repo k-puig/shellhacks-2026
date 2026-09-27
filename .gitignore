@@ -5,9 +5,14 @@
 
 data/
 /data/
+# ...but not the mobile app's source folder of the same name
+!frontend/dodo-mobile/src/data/
 
 # Backend secrets (Auth0, Postgres, storage keys): never commit
 backend/env
 
 # macOS folder metadata
 .DS_Store
+
+# Local tooling scratch (plans ledger, logs, renders)
+.superpowers/
