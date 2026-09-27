@@ -93,3 +93,16 @@ describe('backend login', () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 });
+
+describe('file uploads', () => {
+  it('sends form data as is, without a JSON content type', async () => {
+    const { api, fetchImpl } = setup(reply(201, { code: 201, message: 'created', content: { id: 'b1' } }));
+    const form = new FormData();
+    form.append('title', 'Frankenstein');
+
+    await api('/book', { method: 'POST', body: form });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.body).toBe(form);
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+});

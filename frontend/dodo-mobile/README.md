@@ -44,6 +44,7 @@ Open DODO on the phone and choose your Mac's server from the dev launcher, or op
 On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, AirDrop…). The app converts it on the phone (`src/data/epub.ts`), with its cover, and it shows up first in the library, even offline. Free EPUBs to try: [Project Gutenberg](https://www.gutenberg.org) (for example `https://www.gutenberg.org/ebooks/11.epub3.images` opened in Safari on the iPhone).
 
 - Chapters come from the book's files in reading order. Contents, copyright, index and Project Gutenberg license pages are skipped, and so are code, tables and images, because they can't be read aloud.
+- When `EXPO_PUBLIC_API_URL` is set, the `.epub` is also uploaded to the backend (stored in S3) under the same id, in the background. If the upload fails, for example offline, the book stays on the phone.
 - Adding a book that's already there shows "Already in your library". A full book you add hides the built-in sample of the same book.
 - PDFs aren't supported. Only EPUBs can be picked.
 

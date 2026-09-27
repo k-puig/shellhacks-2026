@@ -45,18 +45,21 @@ export function createApiClient(options: {
 
   async function send(path: string, init: { method?: string; body?: unknown }) {
     const token = await getToken();
+    // File uploads go as multipart form data (fetch sets its own Content-Type).
+    const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (init.body !== undefined) headers['Content-Type'] = 'application/json';
+    if (init.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    // A book upload can take a while on a slow connection.
+    const timeout = setTimeout(() => controller.abort(), isForm ? Math.max(timeoutMs, 120_000) : timeoutMs);
     let res: Response;
     try {
       res = await fetchImpl(`${baseUrl}/api/v1${path}`, {
         method: init.method ?? 'GET',
         headers,
-        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        body: init.body === undefined ? undefined : isForm ? (init.body as FormData) : JSON.stringify(init.body),
         // The backend knows the user by its "userinfo" cookie.
         credentials: 'include',
         signal: controller.signal,

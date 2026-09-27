@@ -5,6 +5,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
+import { uploadBook } from '@/api/books';
+import { isApiConfigured } from '@/api/client';
+import { useApi } from '@/api/useApi';
 import { BookCover } from '@/components/BookCover';
 import { EpubError } from '@/data/epub';
 import { useLibrary } from '@/data/libraryStore';
@@ -27,6 +30,7 @@ export default function HomeScreen() {
   const progressOf = (book: Book) => bookProgress(book, positions[book.id]?.furthestIdx ?? -1);
   const current = getBook(currentBookId);
   const [adding, setAdding] = useState(false);
+  const api = useApi();
 
   const open = (book: Book) => {
     openBook(book.id);
@@ -37,8 +41,18 @@ export default function HomeScreen() {
     setAdding(true);
     try {
       const picked = await pickEpubBook();
-      if (picked && addBook(picked.book, picked.cover).id !== picked.book.id) {
+      if (!picked) return;
+      const inLibrary = addBook(picked.book, picked.cover);
+      if (inLibrary.id !== picked.book.id) {
         Alert.alert('Already in your library', `“${picked.book.title}” is already on your shelf.`);
+        return;
+      }
+      // Also keep it in the account (S3 via the backend). The book is already
+      // on the phone, so a failed upload (offline, no server set) is only logged.
+      if (isApiConfigured()) {
+        uploadBook(api, inLibrary, picked.fileUri).catch((error) =>
+          console.warn('[dodo] Could not upload book:', String(error)),
+        );
       }
     } catch (error) {
       Alert.alert(
