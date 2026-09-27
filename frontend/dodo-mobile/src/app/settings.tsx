@@ -5,7 +5,6 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { AUTH_ENABLED } from '@/auth/config';
 import { initials } from '@/auth/profile';
 import { useAuth } from '@/auth/useAuth';
 import { CommandsSheet } from '@/components/CommandsSheet';
@@ -138,21 +137,19 @@ export default function SettingsScreen() {
           )}
           <View style={styles.rowText}>
             <Text style={styles.accountName} numberOfLines={1}>
-              {user?.name ?? (AUTH_ENABLED ? 'Signed in' : 'Guest')}
+              {user?.name ?? 'Signed in'}
             </Text>
             <Text style={styles.detail} numberOfLines={1}>
-              {user?.email ?? (AUTH_ENABLED ? '' : 'Sign-in is turned off for now')}
+              {user?.email ?? ''}
             </Text>
           </View>
         </View>
-        {AUTH_ENABLED && (
-          <Pressable
-            style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
-            onPress={handleLogout}
-            accessibilityRole="button">
-            <Text style={styles.logoutText}>Log Out</Text>
-          </Pressable>
-        )}
+        <Pressable
+          style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
+          onPress={handleLogout}
+          accessibilityRole="button">
+          <Text style={styles.logoutText}>Log Out</Text>
+        </Pressable>
 
         <Section title="Listening">
           <Row
