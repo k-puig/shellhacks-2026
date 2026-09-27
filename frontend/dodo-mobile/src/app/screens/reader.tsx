@@ -549,6 +549,8 @@ function Reader({ book }: { book: Book }) {
     },
     // Not until saved settings load, so a saved "off" never briefly turns the mic on.
     alwaysListen: settingsLoaded && settings.wakeWord,
+    // "Hey DODO" keeps working with the screen locked while the book is read aloud.
+    keepInBackground: narration.isPlaying,
     ignore: (text) =>
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });

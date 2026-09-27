@@ -58,6 +58,13 @@ On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, Air
 
 Say **"Hey DODO"**, pause for a moment, then give the command. For example: `pause`, `play`, `go back`, `skip`, `next chapter`, `faster`, `slower`, `highlight that`, `highlight that in blue`, `note …`, or a question like `who is …?`. The full list is in Settings.
 
+**With the screen locked or another app open:** while a book is being narrated, DODO keeps listening, and keeps going for 2 minutes after a pause. iOS shows its orange mic dot while it does. Currently **one command works per trip out of the app**:
+- After each command, the listener ends its speech session and starts a new one, to clear what it already heard.
+- iOS lets a background app keep a recording that's already running, but won't let it *start* a new one, so that restart is refused (`audio-capture`, OSStatus `!int`).
+- Opening the app starts listening again.
+
+The fix is to keep one session running in the background and skip past handled words instead of restarting (see `src/voice/useWakeWord.ts`).
+
 ## Checks
 
 ```bash
