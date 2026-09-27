@@ -7,9 +7,27 @@ import {
 import type {
   DeleteBookInput,
   DeleteProfilePictureInput,
+  FetchBookInput,
+  FetchProfilePictureInput,
+  FetchS3ObjectOutput,
   UploadBookInput,
   UploadProfilePictureInput,
 } from "@package/s3/function-dtos.ts";
+
+function toReadableStream(body: unknown): ReadableStream<Uint8Array> {
+  if (body instanceof ReadableStream) {
+    return body as ReadableStream<Uint8Array>;
+  }
+
+  if (
+    body && typeof body === "object" && "transformToWebStream" in body &&
+    typeof body.transformToWebStream === "function"
+  ) {
+    return body.transformToWebStream() as ReadableStream<Uint8Array>;
+  }
+
+  throw new Error("S3 object body is not a readable stream");
+}
 
 export class S3Client {
   private readonly s3: S3;
@@ -36,6 +54,23 @@ export class S3Client {
     });
   }
 
+  async fetchBook(obj: FetchBookInput): Promise<FetchS3ObjectOutput> {
+    const response = await this.s3.getObject({
+      Bucket: EPUB_S3_BUCKET,
+      Key: obj.key,
+    });
+
+    if (!response.Body) {
+      throw new Error("Book object has no body");
+    }
+
+    return {
+      body: toReadableStream(response.Body),
+      contentLength: response.ContentLength,
+      contentType: response.ContentType,
+    };
+  }
+
   async uploadProfilePicture(obj: UploadProfilePictureInput): Promise<string> {
     await this.s3.putObject({
       Bucket: PFP_S3_BUCKET,
@@ -52,5 +87,24 @@ export class S3Client {
       Bucket: PFP_S3_BUCKET,
       Key: obj.key,
     });
+  }
+
+  async fetchProfilePicture(
+    obj: FetchProfilePictureInput,
+  ): Promise<FetchS3ObjectOutput> {
+    const response = await this.s3.getObject({
+      Bucket: PFP_S3_BUCKET,
+      Key: obj.key,
+    });
+
+    if (!response.Body) {
+      throw new Error("Profile picture object has no body");
+    }
+
+    return {
+      body: toReadableStream(response.Body),
+      contentLength: response.ContentLength,
+      contentType: response.ContentType,
+    };
   }
 }

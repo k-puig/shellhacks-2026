@@ -10,6 +10,7 @@ import * as z from "@zod/zod";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
   changeUserProfilePictureRequestZObject,
+  fetchUserRequestZObject,
   updateUserRequestZObject,
 } from "@app/rest/user/dtos/user-request-dto.ts";
 import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
@@ -150,6 +151,45 @@ export function createUserRouter(
       );
 
       return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
+  user.get("/:id/profile-picture", async (c) => {
+    const parsedUserData = await fetchUserRequestZObject.safeParseAsync({
+      id: c.req.param("id"),
+    });
+
+    if (!parsedUserData.success) {
+      return c.json({
+        code: 400,
+        message: "Invalid user id",
+        content: parsedUserData.error.issues,
+      }, 400);
+    }
+
+    try {
+      const profilePicture = await userService.fetchProfilePicture(
+        parsedUserData.data,
+      );
+      const headers: Record<string, string> = {
+        "Content-Type": profilePicture.contentType,
+      };
+
+      if (profilePicture.contentLength !== undefined) {
+        headers["Content-Length"] = String(profilePicture.contentLength);
+      }
+
+      return c.body(profilePicture.body, 200, headers);
     } catch (error) {
       if (error instanceof BaseError) {
         return c.json({

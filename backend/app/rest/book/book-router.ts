@@ -76,6 +76,46 @@ export function createBookRouter(
     }
   });
 
+  book.get("/:id/file", async (c) => {
+    const parsed = await fetchBookRequestZObj.safeParseAsync({
+      id: c.req.param("id"),
+    });
+
+    if (!parsed.success) {
+      return c.json({
+        code: 400,
+        message: "Invalid book id",
+        content: parsed.error.issues,
+      });
+    }
+
+    try {
+      const bookObject = await bookService.fetchBookObject(parsed.data);
+      const headers: Record<string, string> = {
+        "Content-Type": bookObject.contentType,
+        "Content-Disposition": `inline; filename*=UTF-8''${
+          encodeURIComponent(bookObject.filename)
+        }`,
+      };
+
+      if (bookObject.contentLength !== undefined) {
+        headers["Content-Length"] = String(bookObject.contentLength);
+      }
+
+      return c.body(bookObject.body, 200, headers);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
   book.delete("/:id", async (c) => {
     const parsed = await deleteBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
