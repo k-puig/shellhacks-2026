@@ -3,9 +3,13 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 
 import { clampRate, DEFAULT_SETTINGS, parseSettings, type Settings } from './settings';
 
+type Patch = Partial<Settings>;
 type SettingsState = {
   settings: Settings;
-  update: (patch: Partial<Settings>) => void;
+  // False until the saved settings have been read, so nothing acts on defaults.
+  loaded: boolean;
+  // A patch, or a function of the latest settings (for "faster" twice in a row).
+  update: (patch: Patch | ((current: Settings) => Patch)) => void;
 };
 
 const SettingsContext = createContext<SettingsState | null>(null);
@@ -47,14 +51,19 @@ export function SettingsProvider({ children }: PropsWithChildren) {
     if (loaded) saveSettings(settings);
   }, [settings, loaded]);
 
-  const update = (patch: Partial<Settings>) =>
-    setSettings((current) => ({
-      ...current,
-      ...patch,
-      ...(patch.rate !== undefined ? { rate: clampRate(patch.rate) } : {}),
-    }));
+  const update = (change: Patch | ((current: Settings) => Patch)) =>
+    setSettings((current) => {
+      const patch = typeof change === 'function' ? change(current) : change;
+      return {
+        ...current,
+        ...patch,
+        ...(patch.rate !== undefined ? { rate: clampRate(patch.rate) } : {}),
+      };
+    });
 
-  return <SettingsContext.Provider value={{ settings, update }}>{children}</SettingsContext.Provider>;
+  return (
+    <SettingsContext.Provider value={{ settings, loaded, update }}>{children}</SettingsContext.Provider>
+  );
 }
 
 export function useSettings() {

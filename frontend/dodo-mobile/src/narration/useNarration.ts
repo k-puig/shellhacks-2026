@@ -247,7 +247,7 @@ export function useNarration(book: Book) {
   }, [aside]);
 
   // "Faster" / "slower" by voice; saved in Settings, which the effect below applies.
-  const changeRate = (delta: number) => updateSettings({ rate: rateRef.current + delta });
+  const changeRate = (delta: number) => updateSettings((current) => ({ rate: current.rate + delta }));
 
   // Apply Settings changes: speed right away, the voice from the next paragraph.
   useEffect(() => {

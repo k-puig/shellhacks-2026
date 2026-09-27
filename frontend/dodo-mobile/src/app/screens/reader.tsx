@@ -187,7 +187,7 @@ export default function ReaderScreen() {
 function Reader({ book }: { book: Book }) {
   const narration = useNarration(book);
   const library = useLibrary();
-  const { settings } = useSettings();
+  const { settings, loaded: settingsLoaded } = useSettings();
   const insets = useSafeAreaInsets();
   const highlights = useMemo(
     () => library.highlights.filter((h) => h.bookId === book.id),
@@ -547,7 +547,8 @@ function Reader({ book }: { book: Book }) {
     onCancel: () => {
       narration.unduck();
     },
-    alwaysListen: settings.wakeWord,
+    // Not until saved settings load, so a saved "off" never briefly turns the mic on.
+    alwaysListen: settingsLoaded && settings.wakeWord,
     ignore: (text) =>
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });

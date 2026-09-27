@@ -105,6 +105,9 @@ export default function SettingsScreen() {
 
   const handleLogout = async () => {
     await logout();
+    // Close this sheet and swap out the tabs under it, so the reader (and its
+    // narration and mic) shuts down instead of running behind Welcome.
+    router.dismissAll();
     router.replace('/welcome');
   };
 

@@ -1,6 +1,6 @@
 import { useAudioPlayer } from 'expo-audio';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { onFinish } from '@/narration/player';
@@ -27,28 +27,39 @@ export function VoicePicker({
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
+  // Only the latest tap may play; closing or tapping again bumps it.
+  const previewSession = useRef(0);
+  const finishSub = useRef<{ remove: () => void } | null>(null);
+
   const stopPreview = () => {
+    previewSession.current++;
+    finishSub.current?.remove();
+    finishSub.current = null;
     player.pause();
     setPreviewing(null);
+    setLoading(null);
   };
 
   const preview = async (voiceId: string, name: string) => {
     if (previewing === voiceId) return stopPreview();
     stopPreview();
+    const mySession = previewSession.current;
     setLoading(voiceId);
     try {
       const audio = await synthesize(sample(name), voiceId);
+      if (previewSession.current !== mySession) return;
       player.replace({ uri: audio.fileUri });
       player.play();
       setPreviewing(voiceId);
-      const sub = onFinish(player, () => {
-        sub.remove();
+      finishSub.current = onFinish(player, () => {
+        finishSub.current?.remove();
+        finishSub.current = null;
         setPreviewing(null);
       });
     } catch (error) {
       console.log('[dodo] Voice preview failed:', String(error));
     } finally {
-      setLoading(null);
+      if (previewSession.current === mySession) setLoading(null);
     }
   };
 

@@ -202,6 +202,8 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
   useSpeechRecognitionEvent('result', (event) => {
     vlog('event result', { final: event.isFinal, draining: draining.current, awake: awake.current }, JSON.stringify(event.results.map((r) => r.transcript)));
     if (draining.current) return;
+    // "Hey DODO" is off: only a mic-button command is listened to.
+    if (!alwaysListenRef.current && !awake.current) return;
     failures.current = 0;
 
     const transcripts = event.results.map((r) => r.transcript);
@@ -313,6 +315,9 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
     const t = setTimeout(() => {
       if (alwaysListen) startFresh();
       else if (!awake.current) {
+        // Cancel any restart already queued, or the mic comes back on.
+        if (restartTimer.current) clearTimeout(restartTimer.current);
+        if (refreshTimer.current) clearTimeout(refreshTimer.current);
         ExpoSpeechRecognitionModule.abort();
         setStatus('idle');
       }
@@ -330,9 +335,11 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
     if (awake.current || !enabled.current) return;
     vlog('wake() by tap');
     // With "Hey DODO" off the mic isn't running yet: start it for this command.
-    if (!running.current) start();
+    const fresh = !running.current;
+    if (fresh) start();
     awake.current = true;
-    tapSince.current = lastTranscript.current;
+    // A fresh session has nothing said before the tap; otherwise skip what was.
+    tapSince.current = fresh ? '' : lastTranscript.current;
     setStatus('awake');
     hear('');
     handlers.current.onWake();
