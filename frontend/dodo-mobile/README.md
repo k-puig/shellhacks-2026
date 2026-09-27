@@ -72,7 +72,7 @@ On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, Air
 
 Say **"Hey Nova"**, pause for a moment, then give the command. For example: `pause`, `play`, `go back`, `skip`, `next chapter`, `faster`, `slower`, `highlight that`, `highlight that in blue`, `note …`, or a question like `who is …?`. The full list is in Settings.
 
-The wake phrase needs "Hey" (or "Hi"/"OK"): books can say "Nova" on their own. The narrator plays next to the mic, so hold the phone closer to you than to the speaker, or lower the volume. If iOS's recognizer goes silent for 15 seconds while a book plays, the listener restarts it (the stall watchdog in `src/voice/useWakeWord.ts`).
+"Hey"/"Hi"/"OK" + "Nova" works anywhere, as do run-together mishearings like "hangover" or "Hanover". A plain "Nova" only counts at the start of what you say ("Nova, pause"), since books say "Nova" mid-sentence. iOS echo cancellation is on, so the mic barely hears the narrator even through the phone speaker. If iOS's recognizer goes silent for 15 seconds while a book plays, the listener restarts it (the stall watchdog in `src/voice/useWakeWord.ts`).
 
 **With the screen locked or another app open:** while a book is being narrated, DODO keeps listening, and keeps going for 2 minutes after a pause. iOS shows its orange mic dot while it does. Currently **one command works per trip out of the app**:
 - After each command, the listener ends its speech session and starts a new one, to clear what it already heard.
@@ -81,7 +81,7 @@ The wake phrase needs "Hey" (or "Hi"/"OK"): books can say "Nova" on their own. T
 
 For best results in the background: stay in the app a few seconds before leaving, speak close to the phone, and say "Hey Nova" in a gap in the narration.
 
-Next steps: keep one session running in the background and skip past handled words instead of restarting, and try iOS echo cancellation, so the narrator doesn't drown out the wake phrase.
+Next steps: keep one session running in the background and skip past handled words instead of restarting.
 
 ## Checks
 
