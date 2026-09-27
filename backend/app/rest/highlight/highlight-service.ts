@@ -34,7 +34,12 @@ export class HighlightService {
 
   async createHighlight(
     req: CreateHighlightRequest,
+    userId: string,
   ): Promise<CreateHighlightBaseResponse> {
+    if (!await this.highlightRepository.hasOwnedBook(req.bookId, userId)) {
+      throw new BaseError(404, "Book not found");
+    }
+
     const highlight = await this.highlightRepository.createHighlight(req);
 
     return await createBaseResponse(
@@ -46,8 +51,12 @@ export class HighlightService {
 
   async fetchHighlight(
     req: FetchHighlightRequest,
+    userId: string,
   ): Promise<FetchHighlightBaseResponse> {
-    const highlight = await this.highlightRepository.findById(req.id);
+    const highlight = await this.highlightRepository.findOwnedHighlight(
+      req.id,
+      userId,
+    );
 
     if (!highlight) {
       throw new BaseError(404, "Highlight not found");
@@ -62,14 +71,21 @@ export class HighlightService {
 
   async updateHighlight(
     req: UpdateHighlightRequest,
+    userId: string,
   ): Promise<UpdateHighlightBaseResponse> {
-    const highlight = await this.highlightRepository.findById(req.id);
+    const highlight = await this.highlightRepository.findOwnedHighlight(
+      req.id,
+      userId,
+    );
 
     if (!highlight) {
       throw new BaseError(404, "Highlight not found");
     }
 
     if (req.bookId !== undefined) {
+      if (!await this.highlightRepository.hasOwnedBook(req.bookId, userId)) {
+        throw new BaseError(404, "Book not found");
+      }
       highlight.book = this.highlightRepository.getBookReference(req.bookId);
     }
 
@@ -92,8 +108,12 @@ export class HighlightService {
 
   async deleteHighlight(
     req: DeleteHighlightRequest,
+    userId: string,
   ): Promise<DeleteHighlightBaseResponse> {
-    const wasDeleted = await this.highlightRepository.deleteById(req.id);
+    const wasDeleted = await this.highlightRepository.deleteOwnedHighlight(
+      req.id,
+      userId,
+    );
 
     if (!wasDeleted) {
       throw new BaseError(404, "Highlight not found");

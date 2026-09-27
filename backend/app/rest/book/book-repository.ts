@@ -10,6 +10,7 @@ import type { CreateBookRequest } from "@app/rest/book/dtos/book-request-dto.ts"
 
 type CreateBookRecordRequest = Omit<CreateBookRequest, "book"> & {
   id: string;
+  userId: string;
   s3Key: string;
 };
 
@@ -19,11 +20,26 @@ export class BookRepository extends BaseRepository<BookSchema> {
   }
 
   getLibraryReference(id: string): Ref<LibrarySchema> {
-    return this.em.getReference(LibrarySchema, id);
+    return this.em.getReference(LibrarySchema, id, { wrapped: true });
   }
 
   getUserReference(id: string): Ref<UserSchema> {
-    return this.em.getReference(UserSchema, id);
+    return this.em.getReference(UserSchema, id, { wrapped: true });
+  }
+
+  async hasOwnedLibrary(libraryId: string, userId: string): Promise<boolean> {
+    return (await this.em.findOne(LibrarySchema, {
+      id: libraryId,
+      owner: userId,
+    })) !== null;
+  }
+
+  async findOwnedBook(id: string, userId: string): Promise<BookSchema | null> {
+    return await this.findOne({ id, user: userId });
+  }
+
+  async deleteOwnedBook(id: string, userId: string): Promise<boolean> {
+    return await this.delete({ id, user: userId });
   }
 
   async createBook(req: CreateBookRecordRequest): Promise<BookSchema> {

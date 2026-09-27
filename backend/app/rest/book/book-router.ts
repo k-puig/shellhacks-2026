@@ -7,8 +7,10 @@ import {
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import { BookService } from "@app/rest/book/book-service.ts";
 
-export function createBookRouter(bookService: BookService): Hono {
-  const book = new Hono();
+export function createBookRouter(
+  bookService: BookService,
+): Hono<{ Variables: { authenticatedUserId: string } }> {
+  const book = new Hono<{ Variables: { authenticatedUserId: string } }>();
 
   book.post("/", async (c) => {
     const parsed = await createBookRequestZObj.safeParseAsync(
@@ -20,11 +22,26 @@ export function createBookRouter(bookService: BookService): Hono {
         code: 400,
         message: "Invalid book request",
         content: parsed.error.issues,
-      });
+      }, 400);
     }
 
-    const response = await bookService.createBook(parsed.data);
-    return c.json(response);
+    try {
+      const response = await bookService.createBook(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
+      return c.json(response);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
   });
 
   book.get("/:id", async (c) => {
@@ -37,11 +54,14 @@ export function createBookRouter(bookService: BookService): Hono {
         code: 400,
         message: "Invalid book id",
         content: parsed.error.issues,
-      });
+      }, 400);
     }
 
     try {
-      const response = await bookService.fetchBook(parsed.data);
+      const response = await bookService.fetchBook(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
@@ -49,7 +69,7 @@ export function createBookRouter(bookService: BookService): Hono {
           code: error.code,
           message: error.message,
           content: null,
-        });
+        }, error.code);
       }
 
       throw error;
@@ -66,11 +86,14 @@ export function createBookRouter(bookService: BookService): Hono {
         code: 400,
         message: "Invalid book id",
         content: parsed.error.issues,
-      });
+      }, 400);
     }
 
     try {
-      const response = await bookService.deleteBook(parsed.data);
+      const response = await bookService.deleteBook(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
@@ -78,7 +101,7 @@ export function createBookRouter(bookService: BookService): Hono {
           code: error.code,
           message: error.message,
           content: null,
-        });
+        }, error.code);
       }
 
       throw error;

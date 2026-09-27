@@ -6,9 +6,7 @@ const optionalFormNumber = z.string()
   .optional();
 
 export const createBookRequestZObj = z.object({
-  id: z.uuidv4().optional(),
   libraryId: z.uuidv4(),
-  userId: z.uuidv4(),
   title: z.string(),
   author: z.string(),
   lastAccessedAt: z.string().datetime().optional(),
@@ -29,7 +27,6 @@ export const fetchBookRequestZObj = z.object({
 export const updateBookRequestZObj = z.object({
   id: z.uuidv4(),
   libraryId: z.uuidv4().optional(),
-  userId: z.uuidv4().optional(),
   title: z.string().optional(),
   author: z.string().optional(),
   lastAccessedAt: z.string().datetime().nullable().optional(),

@@ -1,7 +1,6 @@
 import * as z from "@zod/zod";
 
 export const createLibraryRequestZObj = z.object({
-  id: z.uuidv4().optional(),
   name: z.string(),
 });
 

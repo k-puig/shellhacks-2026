@@ -16,13 +16,29 @@ export class HighlightRepository extends BaseRepository<HighlightSchema> {
     return this.em.getReference(BookSchema, id, { wrapped: true });
   }
 
+  async hasOwnedBook(bookId: string, userId: string): Promise<boolean> {
+    return (await this.em.findOne(BookSchema, { id: bookId, user: userId })) !==
+      null;
+  }
+
+  async findOwnedHighlight(
+    id: string,
+    userId: string,
+  ): Promise<HighlightSchema | null> {
+    return await this.findOne({ id, book: { user: userId } });
+  }
+
+  async deleteOwnedHighlight(id: string, userId: string): Promise<boolean> {
+    return await this.delete({ id, book: { user: userId } });
+  }
+
   async createHighlight(
     req: CreateHighlightRequest,
   ): Promise<HighlightSchema> {
     const now = new Date();
 
     return await this.create({
-      id: req.id ?? crypto.randomUUID(),
+      id: crypto.randomUUID(),
       book: this.getBookReference(req.bookId),
       start: req.start,
       end: req.end,

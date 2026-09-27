@@ -24,8 +24,9 @@ export class LibraryService {
 
   async createLibrary(
     req: CreateLibraryRequest,
+    ownerId: string,
   ): Promise<CreateLibraryBaseResponse> {
-    const library = await this.libraryRepository.createLibrary(req);
+    const library = await this.libraryRepository.createLibrary(req, ownerId);
 
     return await createBaseResponse(201, "Library created", {
       id: library.id,
@@ -35,8 +36,12 @@ export class LibraryService {
 
   async fetchLibrary(
     req: FetchLibraryRequest,
+    ownerId: string,
   ): Promise<FetchLibraryBaseResponse> {
-    const library = await this.libraryRepository.findById(req.id);
+    const library = await this.libraryRepository.findOwnedLibrary(
+      req.id,
+      ownerId,
+    );
 
     if (!library) {
       throw new BaseError(404, "Library not found");
@@ -50,8 +55,12 @@ export class LibraryService {
 
   async updateLibrary(
     req: UpdateLibraryRequest,
+    ownerId: string,
   ): Promise<UpdateLibraryBaseResponse> {
-    const library = await this.libraryRepository.findById(req.id);
+    const library = await this.libraryRepository.findOwnedLibrary(
+      req.id,
+      ownerId,
+    );
 
     if (!library) {
       throw new BaseError(404, "Library not found");
@@ -68,8 +77,12 @@ export class LibraryService {
 
   async deleteLibrary(
     req: DeleteLibraryRequest,
+    ownerId: string,
   ): Promise<DeleteLibraryBaseResponse> {
-    const wasDeleted = await this.libraryRepository.deleteById(req.id);
+    const wasDeleted = await this.libraryRepository.deleteOwnedLibrary(
+      req.id,
+      ownerId,
+    );
 
     if (!wasDeleted) {
       throw new BaseError(404, "Library not found");

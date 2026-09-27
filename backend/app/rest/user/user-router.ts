@@ -5,7 +5,7 @@ import {
   getSignedCookie,
   setSignedCookie,
 } from "hono/cookie";
-import { auth, callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
+import { callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
@@ -15,29 +15,14 @@ import {
 import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
 import { UserService } from "@app/rest/user/user-service.ts";
 
+type UserEnv = OIDCEnv & {
+  Variables: { authenticatedUserId?: string };
+};
+
 export function createUserRouter(
   userService: UserService,
-): Hono<OIDCEnv> {
-  // Initialize router with auth middleware
-  const user = new Hono<OIDCEnv>();
-  user.use(
-    auth({
-      domain: Deno.env.get("AUTH0_DOMAIN"),
-      clientID: Deno.env.get("AUTH0_CLIENT_ID"),
-      clientSecret: Deno.env.get("AUTH0_CLIENT_SECRET"),
-      baseURL: Deno.env.get("BASE_URL"),
-      session: {
-        secret: Deno.env.get("SESSION_SECRET"),
-      },
-      routes: {
-        login: "/api/v1/user/login",
-        callback: "/api/v1/user/callback",
-        logout: "/api/v1/user/logout",
-      },
-      customRoutes: ["callback", "logout"],
-      authRequired: false,
-    }),
-  );
+): Hono<UserEnv> {
+  const user = new Hono<UserEnv>();
 
   const cookieSecret = Deno.env.get("COOKIE_SECRET");
   if (!cookieSecret) {
@@ -117,24 +102,13 @@ export function createUserRouter(
   });
 
   user.delete("/delete", async (c) => {
-    const session = await c.var.auth0Client?.getSession(c);
-    const userData = z.object({
-      sub: z.string(),
-    });
-
-    const parsedUserData = await userData.safeParseAsync(session?.user);
-    if (!parsedUserData.success) {
-      console.error(
-        "Auth0 session user did not match expected schema:",
-        parsedUserData.error.issues,
-      );
-      return c.newResponse("unable to parse user auth id", 400);
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
     }
 
     try {
-      const response = await userService.deleteUserByAuthId(
-        parsedUserData.data.sub,
-      );
+      const response = await userService.deleteUser(userId);
 
       return c.json(response, response.code);
     } catch (error) {
@@ -151,6 +125,11 @@ export function createUserRouter(
   });
 
   user.patch("/profile-picture", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
     const parsedUserData = await changeUserProfilePictureRequestZObject
       .safeParseAsync(
         await c.req.parseBody(),
@@ -166,6 +145,7 @@ export function createUserRouter(
 
     try {
       const response = await userService.uploadOrDeleteProfilePicture(
+        userId,
         parsedUserData.data,
       );
 
@@ -184,6 +164,11 @@ export function createUserRouter(
   });
 
   user.patch("/update", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
     const parsedUserData = await updateUserRequestZObject.safeParseAsync(
       await c.req.json(),
     );
@@ -197,7 +182,10 @@ export function createUserRouter(
     }
 
     try {
-      const response = await userService.updateUser(parsedUserData.data);
+      const response = await userService.updateUser(
+        userId,
+        parsedUserData.data,
+      );
 
       return c.json(response, response.code);
     } catch (error) {

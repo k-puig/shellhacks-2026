@@ -39,9 +39,16 @@ export class BookService {
     this.s3Client = new S3Client();
   }
 
-  async createBook(req: CreateBookRequest): Promise<CreateBookBaseResponse> {
-    const id = req.id ?? crypto.randomUUID();
-    const s3Key = `books/${req.userId}/${id}.epub`;
+  async createBook(
+    req: CreateBookRequest,
+    userId: string,
+  ): Promise<CreateBookBaseResponse> {
+    if (!await this.bookRepository.hasOwnedLibrary(req.libraryId, userId)) {
+      throw new BaseError(404, "Library not found");
+    }
+
+    const id = crypto.randomUUID();
+    const s3Key = `books/${userId}/${id}.epub`;
 
     await this.s3Client.uploadBook({
       key: s3Key,
@@ -51,14 +58,18 @@ export class BookService {
     const book = await this.bookRepository.createBook({
       ...req,
       id,
+      userId,
       s3Key,
     });
 
     return await createBaseResponse(201, "Book created", toBookContent(book));
   }
 
-  async fetchBook(req: FetchBookRequest): Promise<FetchBookBaseResponse> {
-    const book = await this.bookRepository.findById(req.id);
+  async fetchBook(
+    req: FetchBookRequest,
+    userId: string,
+  ): Promise<FetchBookBaseResponse> {
+    const book = await this.bookRepository.findOwnedBook(req.id, userId);
 
     if (!book) {
       throw new BaseError(404, "Book not found");
@@ -67,19 +78,26 @@ export class BookService {
     return await createBaseResponse(200, "Book fetched", toBookContent(book));
   }
 
-  async updateBook(req: UpdateBookRequest): Promise<UpdateBookBaseResponse> {
-    const book = await this.bookRepository.findById(req.id);
+  async updateBook(
+    req: UpdateBookRequest,
+    userId: string,
+  ): Promise<UpdateBookBaseResponse> {
+    const book = await this.bookRepository.findOwnedBook(req.id, userId);
 
     if (!book) {
       throw new BaseError(404, "Book not found");
     }
 
+    if (
+      req.libraryId &&
+      !await this.bookRepository.hasOwnedLibrary(req.libraryId, userId)
+    ) {
+      throw new BaseError(404, "Library not found");
+    }
+
     book.library = req.libraryId
       ? this.bookRepository.getLibraryReference(req.libraryId)
       : book.library;
-    book.user = req.userId
-      ? this.bookRepository.getUserReference(req.userId)
-      : book.user;
     book.title = req.title ?? book.title;
     book.author = req.author ?? book.author;
     book.lastAccessedAt = req.lastAccessedAt === undefined
@@ -98,8 +116,11 @@ export class BookService {
     return await createBaseResponse(200, "Book updated", toBookContent(book));
   }
 
-  async deleteBook(req: DeleteBookRequest): Promise<DeleteBookBaseResponse> {
-    const book = await this.bookRepository.findById(req.id);
+  async deleteBook(
+    req: DeleteBookRequest,
+    userId: string,
+  ): Promise<DeleteBookBaseResponse> {
+    const book = await this.bookRepository.findOwnedBook(req.id, userId);
 
     if (!book) {
       throw new BaseError(404, "Book not found");
@@ -107,7 +128,10 @@ export class BookService {
 
     await this.s3Client.deleteBook({ key: book.s3Key });
 
-    const wasDeleted = await this.bookRepository.deleteById(req.id);
+    const wasDeleted = await this.bookRepository.deleteOwnedBook(
+      req.id,
+      userId,
+    );
 
     if (!wasDeleted) {
       throw new BaseError(404, "Book not found");

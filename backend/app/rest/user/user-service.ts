@@ -4,7 +4,6 @@ import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import type {
   ChangeUserProfilePictureRequest,
   CreateUserRequest,
-  DeleteUserRequest,
   FetchUserRequest,
   UpdateUserRequest,
 } from "@app/rest/user/dtos/user-request-dto.ts";
@@ -51,8 +50,11 @@ export class UserService {
     });
   }
 
-  async updateUser(req: UpdateUserRequest): Promise<UpdateUserBaseResponse> {
-    const user = await this.userRepository.findById(req.id);
+  async updateUser(
+    userId: string,
+    req: UpdateUserRequest,
+  ): Promise<UpdateUserBaseResponse> {
+    const user = await this.userRepository.findById(userId);
 
     if (!user) {
       throw new BaseError(404, "User not found");
@@ -66,60 +68,56 @@ export class UserService {
     });
   }
 
-  async deleteUser(req: DeleteUserRequest): Promise<DeleteUserBaseResponse> {
-    const wasUserDeleted = await this.userRepository.deleteById(req.id);
+  async deleteUser(userId: string): Promise<DeleteUserBaseResponse> {
+    const wasUserDeleted = await this.userRepository.deleteById(userId);
 
     if (!wasUserDeleted) {
       throw new BaseError(404, "User not found");
     }
 
     return await createBaseResponse(200, "User deleted successfully", {
-      id: req.id,
+      id: userId,
     });
   }
 
-  async deleteUserByAuthId(authId: string): Promise<DeleteUserBaseResponse> {
-    const user = await this.userRepository.findByAuthId(authId);
-
-    if (!user) {
-      throw new BaseError(404, "User not found");
-    }
-
-    return await this.deleteUser({ id: user.id });
-  }
-
   async uploadOrDeleteProfilePicture(
+    userId: string,
     req: ChangeUserProfilePictureRequest,
   ): Promise<ChangeUserProfilePictureBaseResponse> {
-    const user = await this.userRepository.findById(req.id);
+    const user = await this.userRepository.findById(userId);
 
     if (!user) {
       throw new BaseError(404, "User not found");
     }
 
-    if(req.key === ""){
+    const ownedKey = `profile-pictures/${user.id}/profile-picture`;
+
+    if (req.key === "") {
+      // Legacy stored keys cannot be trusted to identify an owned object.
+      if (user.s3Key === ownedKey) {
+        await this.s3Client.deleteProfilePicture({ key: ownedKey });
+      }
       user.s3Key = undefined;
       await this.userRepository.flush();
 
       return await createBaseResponse(200, "Profile Picture Removed", {
         id: user.id,
-        key: ""
+        key: "",
       });
     }
 
-    const previousKey = user.s3Key;
+    if (!req.newProfilePicture) {
+      throw new BaseError(400, "A profile picture is required for upload");
+    }
 
     await this.s3Client.uploadProfilePicture({
-      key: req.key,
+      key: ownedKey,
       profilePicture: req.newProfilePicture,
     });
 
-    user.s3Key = req.key;
+    // Re-uploads overwrite the same owned object; never delete a stored legacy key.
+    user.s3Key = ownedKey;
     await this.userRepository.flush();
-
-    if (previousKey && previousKey !== req.key) {
-      await this.s3Client.deleteProfilePicture({ key: previousKey });
-    }
 
     return await createBaseResponse(200, "Profile picture uploaded", {
       id: user.id,

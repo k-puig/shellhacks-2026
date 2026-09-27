@@ -10,8 +10,7 @@ export const fetchUserRequestZObject = z.object({
   id: z.uuidv4(),
 });
 
-export const updateUserRequestZObject = z.object({
-  id: z.uuidv4(),
+export const updateUserRequestZObject = z.strictObject({
   username: z.string(),
 });
 
@@ -19,10 +18,12 @@ export const deleteUserRequestZObject = z.object({
   id: z.uuidv4(),
 });
 
-export const changeUserProfilePictureRequestZObject = z.object({
-  id: z.uuidv4(),
-  key: z.string(),
-  newProfilePicture: z.instanceof(File),
+export const changeUserProfilePictureRequestZObject = z.strictObject({
+  // An empty key retains the existing request convention for removal.
+  key: z.string().optional(),
+  newProfilePicture: z.instanceof(File).optional(),
+}).refine((req) => req.key === "" || req.newProfilePicture !== undefined, {
+  message: "A profile picture is required for upload",
 });
 
 export type CreateUserRequest = z.infer<typeof createUserRequestZObj>;
