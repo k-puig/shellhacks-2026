@@ -14,6 +14,32 @@ import type {
   UploadProfilePictureInput,
 } from "@package/s3/function-dtos.ts";
 
+function isBucketNotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const s3Error = error as {
+    name?: string;
+    Code?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+
+  return s3Error.$metadata?.httpStatusCode === 404 ||
+    s3Error.name === "NotFound" || s3Error.name === "NoSuchBucket" ||
+    s3Error.Code === "NoSuchBucket";
+}
+
+function isBucketAlreadyOwned(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const s3Error = error as { name?: string; Code?: string };
+  return s3Error.name === "BucketAlreadyOwnedByYou" ||
+    s3Error.Code === "BucketAlreadyOwnedByYou";
+}
+
 function toReadableStream(body: unknown): ReadableStream<Uint8Array> {
   if (body instanceof ReadableStream) {
     return body as ReadableStream<Uint8Array>;
@@ -34,6 +60,26 @@ export class S3Client {
 
   constructor() {
     this.s3 = new S3(S3settings);
+  }
+
+  async ensureBucketsExist(): Promise<void> {
+    for (const Bucket of new Set([EPUB_S3_BUCKET, PFP_S3_BUCKET])) {
+      try {
+        await this.s3.headBucket({ Bucket });
+      } catch (error) {
+        if (!isBucketNotFound(error)) {
+          throw error;
+        }
+
+        try {
+          await this.s3.createBucket({ Bucket });
+        } catch (createError) {
+          if (!isBucketAlreadyOwned(createError)) {
+            throw createError;
+          }
+        }
+      }
+    }
   }
 
   async uploadBook(obj: UploadBookInput): Promise<string> {
