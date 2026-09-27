@@ -45,6 +45,17 @@ describe('wake word variants heard in noise', () => {
     'okay nova pause',
     'Hanover pause',
     'hanova pause',
+    'Hangover pause',
+    'hang over pause',
+    'hang-over pause',
+    'Anova pause',
+    'hay nova pause',
+    // The "hey" was dropped (heard with echo cancellation on).
+    ' Nova pause',
+    'Nova, pause',
+    ' A Nova pause',
+    'uh nova pause',
+    ' No va pause',
   ])('wakes on "%s"', (heard) => {
     expect(readResult([heard], false)).toEqual({ woke: true, command: 'pause' });
   });
@@ -54,6 +65,9 @@ describe('wake word variants heard in noise', () => {
     'said Nova, and everybody',
     'Hey! said Nova',
     'a supernova',
+    'Novak walked in',
+    'Novels are long',
+    'and then Nova smiled',
     'The Dodo suddenly called out',
   ])('does not wake on book text "%s"', (heard) => {
     expect(readResult([heard], false)).toBeNull();

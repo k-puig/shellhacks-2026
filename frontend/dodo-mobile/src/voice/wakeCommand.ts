@@ -1,9 +1,17 @@
-// Speech recognizers sometimes mishear "nova", especially in a noisy room, so
-// accept the common variants. Always needs "hey"/"hi"/"ok" first: the mic also
-// hears the narrator, and books can say "Nova" on their own. iOS also runs
-// "hey nova" together into "Hanover"/"Hanova", which have no "hey" to require.
-const WAKE =
-  /\b(?:(?:hey|hi|ok|okay)[\s,.!]+(?:nova(?:'s|s|h)?|no[\s-]va|noba)|hanova|hanover)\b/g;
+// Speech recognizers mishear "hey nova" a lot, especially in a noisy room, so
+// accept the common variants:
+// - "hey"/"hi"/"ok" + "nova" (or a mishearing of it), anywhere;
+// - "hey nova" run together: "Hanover", "Hanova", "hangover", "hang over", "Anova";
+// - a bare "Nova" only at the start of what was said ("Nova, pause"): iOS often
+//   drops the "hey", but books say "Nova" mid-sentence, and the mic can still
+//   hear the narrator.
+const NOVA = String.raw`(?:nova(?:'s|s|h)?|no[\s-]va|noba)`;
+const WAKE = new RegExp(
+  String.raw`(?:\b(?:hey|hay|hi|ok|okay)[\s,.!]+${NOVA}` +
+    String.raw`|\b(?:hanover|hanova|hangover|hang[\s-]over|anova)` +
+    String.raw`|^[\s,.]*(?:(?:a|uh|um|oh|and)[\s,.!]+)?${NOVA})\b`,
+  'g',
+);
 
 const clean = (text: string) => text.replace(/^[\s,.]+/, '').trim();
 
