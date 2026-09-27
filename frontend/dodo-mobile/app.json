@@ -51,7 +51,8 @@
           "microphonePermission": "DODO listens for \"Hey DODO\" so you can control your book hands-free.",
           "speechRecognitionPermission": "DODO turns your voice commands into actions like highlighting and notes."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

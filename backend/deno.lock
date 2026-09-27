@@ -1359,6 +1359,9 @@
         "dependencies": [
           "jsr:@zod/zod@^4.6.5",
           "npm:@auth0/auth0-hono@^1.2.6",
+          "npm:@mikro-orm/core@^7.2.1",
+          "npm:@mikro-orm/decorators@^7.2.1",
+          "npm:@mikro-orm/postgresql@^7.2.1",
           "npm:hono@^4.13.9",
           "npm:uuid@^14.0.2"
         ]

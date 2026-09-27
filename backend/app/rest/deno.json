@@ -1,7 +1,11 @@
 {
   "imports": {
+    "@app/": "../../app/",
     "@auth0/auth0-hono": "npm:@auth0/auth0-hono@^1.2.6",
     "@package/": "../../package/",
+    "@mikro-orm/core": "npm:@mikro-orm/core@^7.2.1",
+    "@mikro-orm/decorators/legacy": "npm:@mikro-orm/decorators@^7.2.1/legacy",
+    "@mikro-orm/postgresql": "npm:@mikro-orm/postgresql@^7.2.1",
     "@zod/zod": "jsr:@zod/zod@^4.6.5",
     "hono": "npm:hono@^4.13.9",
     "uuid": "npm:uuid@^14.0.2"

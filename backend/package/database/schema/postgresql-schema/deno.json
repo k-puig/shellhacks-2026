@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env config/postgresql-config.ts"
+    "dev": "deno run --watch --allow-net main.ts"
   },
   "compilerOptions": {
     "experimentalDecorators": true

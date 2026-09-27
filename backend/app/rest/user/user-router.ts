@@ -5,18 +5,12 @@ import {
   getSignedCookie,
   setSignedCookie,
 } from "hono/cookie";
-import {
-  auth,
-  callback,
-  logout,
-  type OIDCEnv,
-  requiresAuth,
-} from "@auth0/auth0-hono";
+import { auth, callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
-import {
-  createUserResponse,
-  UserService,
-} from "@app/rest/user/service/user-service.ts";
+import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
+import { updateUserRequestZObject } from "@app/rest/user/dtos/user-request-dto.ts";
+import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
+import { UserService } from "@app/rest/user/user-service.ts";
 
 export function createUserRouter(
   userService: UserService,
@@ -49,7 +43,7 @@ export function createUserRouter(
 
   // Remove every cookie sent to this backend before ending the Auth0 session.
   // All backend-issued cookies use the root path, which must match to expire them.
-  user.get("/logout", async (c, next) => {
+  user.get("/logout", (c, next) => {
     for (const name of Object.keys(getCookie(c))) {
       deleteCookie(c, name, { path: "/" });
     }
@@ -66,7 +60,7 @@ export function createUserRouter(
     );
     try {
       const obj = JSON.parse(cookie || "");
-      const userInfo = await createUserResponse.safeParseAsync(obj);
+      const userInfo = await createUserBaseResponseZObj.safeParseAsync(obj);
       if (!userInfo.success) {
         return c.text("could not parse cookie info", 401);
       }
@@ -98,10 +92,11 @@ export function createUserRouter(
       return c.newResponse("unable to parse user name and/or sub", 400);
     }
 
-    const userInfo = await userService.createUserOrDoNothing(
-      parsedUserData.data.name,
-      parsedUserData.data.sub,
-    );
+    const userInfo = await userService.createUserOrDoNothing({
+      id: crypto.randomUUID(),
+      username: parsedUserData.data.name,
+      authId: parsedUserData.data.sub,
+    });
 
     await setSignedCookie(
       c,
@@ -116,6 +111,70 @@ export function createUserRouter(
     );
 
     return c.redirect("/", 302);
+  });
+
+  user.delete("/delete", async (c) => {
+    const session = await c.var.auth0Client?.getSession(c);
+    const userData = z.object({
+      sub: z.string(),
+    });
+
+    const parsedUserData = await userData.safeParseAsync(session?.user);
+    if (!parsedUserData.success) {
+      console.error(
+        "Auth0 session user did not match expected schema:",
+        parsedUserData.error.issues,
+      );
+      return c.newResponse("unable to parse user auth id", 400);
+    }
+
+    try {
+      const response = await userService.deleteUserByAuthId(
+        parsedUserData.data.sub,
+      );
+
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
+  user.patch("/update", async (c) => {
+    const parsedUserData = await updateUserRequestZObject.safeParseAsync(
+      await c.req.json(),
+    );
+
+    if (!parsedUserData.success) {
+      return c.json({
+        code: 400,
+        message: "Invalid update user request",
+        content: parsedUserData.error.issues,
+      }, 400);
+    }
+
+    try {
+      const response = await userService.updateUser(parsedUserData.data);
+
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
   });
 
   return user;
