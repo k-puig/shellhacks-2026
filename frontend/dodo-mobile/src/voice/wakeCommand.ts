@@ -31,12 +31,14 @@ export function readResult(
   since = '',
 ): { woke: boolean; command: string } | null {
   // Use the first alternative that contains the wake word: "hey dodo" is
-  // often only the 2nd or 3rd guess.
-  for (const alt of transcripts) {
+  // often only the 2nd or 3rd guess. Prefer one that also has a command: iOS
+  // can offer "Hey DODO" first and "Hey DODO pause" second.
+  const woken = transcripts.flatMap((alt) => {
     const text = alt.toLowerCase();
     const found = [...text.matchAll(WAKE)].pop();
-    if (found) return { woke: true, command: clean(text.slice(found.index + found[0].length)) };
-  }
+    return found ? [{ woke: true, command: clean(text.slice(found.index + found[0].length)) }] : [];
+  });
+  if (woken.length > 0) return woken.find((r) => r.command) ?? woken[0];
   // Already awake: iOS starts a fresh transcript after a pause, so "Hey DODO
   // … play" arrives as "hey dodo" and then "play" on its own.
   const command = clean(saidSince(transcripts[0] ?? '', since).toLowerCase());
