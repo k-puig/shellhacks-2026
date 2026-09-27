@@ -26,6 +26,12 @@ export type FetchBookObjectResult = {
   filename: string;
 };
 
+function toIsoDateTime(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return date.toISOString();
+}
+
 function toBookContent(book: BookSchema) {
   return {
     id: book.id,
@@ -34,7 +40,7 @@ function toBookContent(book: BookSchema) {
     title: book.title,
     author: book.author,
     s3Key: book.s3Key,
-    lastAccessedAt: book.lastAccessedAt?.toISOString() ?? null,
+    lastAccessedAt: toIsoDateTime(book.lastAccessedAt),
     progress: book.progress === undefined || book.progress === null
       ? null
       : Number(book.progress),

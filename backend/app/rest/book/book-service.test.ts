@@ -319,6 +319,14 @@ Deno.test("book create generates an id and S3 key and returns the id", async () 
   ]);
 });
 
+Deno.test("book list serializes string last-accessed timestamps", async () => {
+  const { service, book } = setup();
+  (book as unknown as { lastAccessedAt: string }).lastAccessedAt =
+    "2026-09-27T12:34:56.000Z";
+  const list = await service.listBooks(owner);
+  assertEquals(list.content[0].lastAccessedAt, "2026-09-27T12:34:56.000Z");
+});
+
 Deno.test("book list is scoped and progress saves a word index", async () => {
   const { service, calls, book } = setup({ bookExists: true });
   const list = await service.listBooks(owner);
