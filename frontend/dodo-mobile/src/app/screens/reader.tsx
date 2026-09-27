@@ -26,6 +26,7 @@ import { ScrollViewMarker } from 'react-native-screens/experimental';
 import { ActionButton, type ActionState } from '@/components/ActionButton';
 import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
+import { useSettings } from '@/data/settingsStore';
 import { chapterIndexAt, nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
 import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
@@ -186,6 +187,7 @@ export default function ReaderScreen() {
 function Reader({ book }: { book: Book }) {
   const narration = useNarration(book);
   const library = useLibrary();
+  const { settings } = useSettings();
   const insets = useSafeAreaInsets();
   const highlights = useMemo(
     () => library.highlights.filter((h) => h.bookId === book.id),
@@ -218,8 +220,13 @@ function Reader({ book }: { book: Book }) {
   const answerEcho = useRef('');
 
   // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
-  const buzzWake = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  const buzzDone = () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // (Both off when haptics are turned off in Settings.)
+  const buzzWake = () => {
+    if (settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  const buzzDone = () => {
+    if (settings.haptics) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
 
   const say = (message: string, ms = 2500) => {
     setFeedback(message);
@@ -236,7 +243,7 @@ function Reader({ book }: { book: Book }) {
   // asking for a color on an existing highlight recolors it instead of stacking.
   const addHighlight = (
     range: { startIdx: number; endIdx: number },
-    colorName: HighlightColorName = 'yellow',
+    colorName: HighlightColorName = settings.highlightColor,
   ) => {
     const color = HIGHLIGHT_COLORS[colorName];
     const existing = highlights.find(
@@ -251,7 +258,7 @@ function Reader({ book }: { book: Book }) {
       return;
     }
     library.addHighlight({ bookId: book.id, ...range, color });
-    say(colorName === 'yellow' ? 'Highlighted' : `Highlighted in ${colorName}`);
+    say(colorName === settings.highlightColor ? 'Highlighted' : `Highlighted in ${colorName}`);
   };
 
   const addNote = (wordIdx: number, content: string) => {
@@ -540,6 +547,7 @@ function Reader({ book }: { book: Book }) {
     onCancel: () => {
       narration.unduck();
     },
+    alwaysListen: settings.wakeWord,
     ignore: (text) =>
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });
@@ -735,6 +743,7 @@ function Reader({ book }: { book: Book }) {
   const statusLabel = {
     starting: 'Starting microphone…',
     listening: 'Say “Hey DODO”',
+    idle: 'Tap the mic to talk',
     awake: voice.heard ? `“${voice.heard}”` : 'Listening…',
     denied: 'Microphone access denied, enable it in Settings',
     error: `Voice unavailable (${voice.errorDetail}), tap to retry`,
@@ -820,7 +829,7 @@ function Reader({ book }: { book: Book }) {
         style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT }, dockStyle]}
         pointerEvents="box-none">
         {/* Only shown when there's something to say; idle listening stays silent. */}
-        {(message || voice.status !== 'listening') && (
+        {(message || (voice.status !== 'listening' && voice.status !== 'idle')) && (
           <Pressable
             onPress={voice.status === 'error' ? voice.retry : undefined}
             style={styles.status}>

@@ -25,6 +25,10 @@ type LibraryState = {
   positionsLoaded: boolean;
   setPosition: (bookId: string, idx: number) => void;
   clearPosition: (bookId: string) => void;
+  // Settings → Your data.
+  clearHighlightsAndNotes: () => void;
+  clearAskedQuestions: () => void;
+  clearAllPositions: () => void;
 };
 
 const LibraryContext = createContext<LibraryState | null>(null);
@@ -72,6 +76,12 @@ export function LibraryProvider({ children }: PropsWithChildren) {
         setPosition: (bookId, idx) =>
           setPositions((all) => ({ ...all, [bookId]: withPosition(all[bookId], idx) })),
         clearPosition: (bookId) => setPositions((all) => withoutBook(all, bookId)),
+        clearHighlightsAndNotes: () => {
+          setHighlights([]);
+          setNotes([]);
+        },
+        clearAskedQuestions: () => setAskedQuestions([]),
+        clearAllPositions: () => setPositions({}),
       }}>
       {children}
     </LibraryContext.Provider>

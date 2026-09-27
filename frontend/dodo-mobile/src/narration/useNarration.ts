@@ -2,6 +2,8 @@ import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-au
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Book, Paragraph } from '@/data/mockBooks';
+import { resumeDelayMs, voiceById } from '@/data/settings';
+import { useSettings } from '@/data/settingsStore';
 
 import {
   ElevenLabsError,
@@ -16,8 +18,6 @@ import { wordAt } from './wordTimings';
 const UPDATE_INTERVAL_MS = 100;
 // Narrator volume while DODO listens for a command.
 const DUCK_VOLUME = 0.2;
-// Pause between the end of DODO's answer and the book picking back up.
-const RESUME_AFTER_ANSWER_MS = 2000;
 
 const paragraphText = (p: Paragraph) => p.words.map((w) => w.text).join(' ');
 
@@ -27,8 +27,9 @@ export function useNarration(book: Book) {
   const paragraphs = useMemo(() => book.chapters.flatMap((c) => c.paragraphs), [book]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [rate, setRate] = useState(1);
   const [error, setError] = useState('');
+  // Speed, voice and what happens after an answer come from Settings.
+  const { settings, update: updateSettings } = useSettings();
 
   // keepAudioSessionActive: pausing must not deactivate the iOS audio
   // session, or the always-on "Hey DODO" listener loses the mic.
@@ -56,7 +57,9 @@ export function useNarration(book: Book) {
   const session = useRef(0);
   const currentIdxRef = useRef(0);
   const playingRef = useRef(false);
-  const rateRef = useRef(1);
+  const rateRef = useRef(settings.rate);
+  const voiceRef = useRef(settings.voiceId);
+  const resumeDelayRef = useRef(resumeDelayMs(settings.resumeAfterAnswer));
   // The paragraph in the player and its word start times (seconds).
   const loaded = useRef<{ paragraph: Paragraph; wordStarts: number[] } | null>(null);
 
@@ -105,7 +108,7 @@ export function useNarration(book: Book) {
       // just seek, no new request.
       let current = loaded.current;
       if (current?.paragraph !== paragraph) {
-        const audio = await synthesize(paragraphText(paragraph));
+        const audio = await synthesize(paragraphText(paragraph), voiceRef.current);
         if (session.current !== mySession) return;
         player.replace({ uri: audio.fileUri });
         current = { paragraph, wordStarts: audio.wordStarts };
@@ -121,7 +124,7 @@ export function useNarration(book: Book) {
       // Fetch the next paragraph now so it starts without a gap. A failure
       // here is ignored; it is fetched again when it is reached.
       const next = nextParagraph(paragraph);
-      if (next) synthesize(paragraphText(next)).catch(() => {});
+      if (next) synthesize(paragraphText(next), voiceRef.current).catch(() => {});
     } catch (e) {
       if (session.current !== mySession) return;
       setPlaying(false);
@@ -197,12 +200,19 @@ export function useNarration(book: Book) {
     unduck();
     const resumeIdx = resumeAfterAside.current;
     resumeAfterAside.current = null;
-    if (resume && resumeIdx !== null && playingRef.current) {
-      resumeTimer.current = setTimeout(() => {
-        resumeTimer.current = null;
-        if (playingRef.current) play(resumeIdx);
-      }, RESUME_AFTER_ANSWER_MS);
+    if (!resume || resumeIdx === null || !playingRef.current) return;
+    const delay = resumeDelayRef.current;
+    if (delay === null) {
+      // Settings: stay paused after answers, ready at the spot they asked from.
+      session.current++;
+      moveTo(resumeIdx);
+      setPlaying(false);
+      return;
     }
+    resumeTimer.current = setTimeout(() => {
+      resumeTimer.current = null;
+      if (playingRef.current) play(resumeIdx);
+    }, delay);
   };
 
   // Speaks DODO's answer. The book stops while DODO talks (it stays in
@@ -216,7 +226,7 @@ export function useNarration(book: Book) {
     player.pause();
     setSpeakingAside(true);
     try {
-      const audio = await synthesize(text);
+      const audio = await synthesize(text, voiceRef.current);
       if (asideSession.current !== mySession) return;
       aside.replace({ uri: audio.fileUri });
       aside.play();
@@ -236,12 +246,18 @@ export function useNarration(book: Book) {
     return () => sub.remove();
   }, [aside]);
 
-  const changeRate = (delta: number) => {
-    const next = Math.min(2, Math.max(0.5, Math.round((rateRef.current + delta) * 10) / 10));
-    rateRef.current = next;
-    setRate(next);
-    player.setPlaybackRate(next, 'high');
-  };
+  // "Faster" / "slower" by voice; saved in Settings, which the effect below applies.
+  const changeRate = (delta: number) => updateSettings({ rate: rateRef.current + delta });
+
+  // Apply Settings changes: speed right away, the voice from the next paragraph.
+  useEffect(() => {
+    rateRef.current = settings.rate;
+    player.setPlaybackRate(settings.rate, 'high');
+  }, [settings.rate, player]);
+  useEffect(() => {
+    voiceRef.current = settings.voiceId;
+    resumeDelayRef.current = resumeDelayMs(settings.resumeAfterAnswer);
+  }, [settings.voiceId, settings.resumeAfterAnswer]);
 
   useEffect(
     () => () => {
@@ -255,8 +271,8 @@ export function useNarration(book: Book) {
     currentIdx,
     currentIdxRef,
     isPlaying,
-    rate,
-    voiceName: 'ElevenLabs',
+    rate: settings.rate,
+    voiceName: voiceById(settings.voiceId).name,
     error,
     play,
     pause,

@@ -2,7 +2,14 @@ import { errorMessage } from '../elevenlabs';
 
 // The client writes audio files; the error mapping under test never does.
 // (Jest hoists this above the import.)
-jest.mock('expo-file-system', () => ({}));
+jest.mock('expo-file-system', () => ({
+  Paths: { cache: 'cache' },
+  File: class {
+    uri = 'file:///narration.mp3';
+    create() {}
+    write() {}
+  },
+}));
 
 describe('errorMessage', () => {
   it('reports a bad key', () => {
@@ -53,5 +60,32 @@ describe('synthesize', () => {
     const assertion = expect(result).rejects.toThrow("ElevenLabs: couldn't connect");
     await jest.advanceTimersByTimeAsync(15_000);
     await assertion;
+  });
+});
+
+describe('synthesize with a voice', () => {
+  it('fetches each voice separately and caches per voice', async () => {
+    process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY = 'test-key';
+    const fetchMock = jest.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => ({
+        audio_base64: '',
+        alignment: { characters: ['H', 'i'], character_start_times_seconds: [0, 0.1] },
+      }),
+    }));
+    globalThis.fetch = fetchMock as never;
+    let synthesize!: typeof import('../elevenlabs').synthesize;
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      synthesize = require('../elevenlabs').synthesize;
+    });
+
+    await synthesize('Hi', 'voice-a');
+    await synthesize('Hi', 'voice-b');
+    await synthesize('Hi', 'voice-a');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toContain('/voice-a/');
+    expect(fetchMock.mock.calls[1][0]).toContain('/voice-b/');
   });
 });

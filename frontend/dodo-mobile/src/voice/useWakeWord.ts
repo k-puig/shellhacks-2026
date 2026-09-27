@@ -14,7 +14,8 @@ const t0 = Date.now();
 const vlog = (...args: unknown[]) =>
   console.log(`[dodo-voice] ${((Date.now() - t0) / 1000).toFixed(2)}s`, ...args);
 
-export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'denied' | 'error';
+// idle: not listening for "Hey DODO" (turned off in Settings); the mic button still works.
+export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'idle' | 'denied' | 'error';
 
 
 // How long to wait after the last word before treating the command as finished.
@@ -35,11 +36,13 @@ type Options = {
   onCancel: () => void;
   // Speech to drop, e.g. the narrator's voice picked up by the mic.
   ignore?: (text: string) => boolean;
+  // Keep listening for "Hey DODO" (default). When false, only the mic button listens.
+  alwaysListen?: boolean;
 };
 
 // Always-on listener: keeps continuous recognition running, watches the
 // transcript for "Hey DODO", then hands whatever follows it to onCommand.
-export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
+export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen = true }: Options) {
   const [status, setStatus] = useState<VoiceStatus>('starting');
   const [heard, setHeard] = useState('');
   // Same as `heard`, readable from callbacks (the mic button ends the turn with it).
@@ -52,6 +55,9 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const [errorDetail, setErrorDetail] = useState('');
 
   const handlers = useRef({ onWake, onCommand, onCancel, ignore });
+  const alwaysListenRef = useRef(alwaysListen);
+  // Whether a recognition session is running right now.
+  const running = useRef(false);
   useEffect(() => {
     handlers.current = { onWake, onCommand, onCancel, ignore };
   });
@@ -137,12 +143,13 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const finish = (command: string) => {
     vlog('finish', JSON.stringify(command));
     reset();
-    setStatus('listening');
+    setStatus(alwaysListenRef.current ? 'listening' : 'idle');
     if (command) handlers.current.onCommand(command);
     else handlers.current.onCancel();
   };
 
   useSpeechRecognitionEvent('start', () => {
+    running.current = true;
     vlog('event start', { awake: awake.current, draining: draining.current });
     draining.current = false;
     lastTranscript.current = '';
@@ -161,8 +168,11 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
     vlog('event end', { enabled: enabled.current, foreground: foreground.current, failures: failures.current });
     // Restart right away normally, so "Hey DODO" is heard again quickly; back
     // off while it keeps failing.
+    running.current = false;
     const delay = failures.current ? 250 * 2 ** failures.current : 100;
-    if (enabled.current && foreground.current) scheduleStart(delay);
+    // With "Hey DODO" off, only keep going while a tapped command is pending.
+    const keepListening = alwaysListenRef.current || awake.current;
+    if (enabled.current && foreground.current && keepListening) scheduleStart(delay);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
@@ -241,6 +251,10 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
         setStatus('denied');
         return;
       }
+      if (!alwaysListenRef.current) {
+        setStatus('idle');
+        return;
+      }
       // Abort any half-dead session first; its "end" restarts us, and start()
       // below covers the case where nothing was running.
       ExpoSpeechRecognitionModule.abort();
@@ -287,6 +301,27 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "Hey DODO" switched on or off in Settings while the reader is open.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    alwaysListenRef.current = alwaysListen;
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    // Next tick, so the switch isn't handled in the middle of this render's effects.
+    const t = setTimeout(() => {
+      if (alwaysListen) startFresh();
+      else if (!awake.current) {
+        ExpoSpeechRecognitionModule.abort();
+        setStatus('idle');
+      }
+    }, 0);
+    return () => clearTimeout(t);
+    // startFresh only touches refs and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alwaysListen]);
+
   // Turn listening back on after it gave up (tap on "Voice unavailable").
   const retry = startFresh;
 
@@ -294,6 +329,8 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore }: Options) {
   const wake = () => {
     if (awake.current || !enabled.current) return;
     vlog('wake() by tap');
+    // With "Hey DODO" off the mic isn't running yet: start it for this command.
+    if (!running.current) start();
     awake.current = true;
     tapSince.current = lastTranscript.current;
     setStatus('awake');

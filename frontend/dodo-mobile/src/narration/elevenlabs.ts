@@ -10,7 +10,7 @@ import { wordStartTimes } from './wordTimings';
 const API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
 // Defaults to "George", one of ElevenLabs' current default voices. (The older
 // built-in voices, like "Rachel", don't exist on newer accounts.)
-const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb';
+export const DEFAULT_VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb';
 const MODEL = 'eleven_flash_v2_5';
 const TIMEOUT_MS = 15_000;
 
@@ -41,22 +41,24 @@ type WithTimestamps = {
   alignment: { characters: string[]; character_start_times_seconds: number[] };
 };
 
-// One entry per paragraph text, so replaying or seeking back costs no credits.
+// One entry per voice and paragraph text, so replaying or seeking back costs no credits.
 // Failed requests are dropped so pressing play again retries them.
 const cache = new Map<string, Promise<Narration>>();
 let fileCount = 0;
 
-export function synthesize(text: string): Promise<Narration> {
-  let request = cache.get(text);
+// Cached per voice, so switching voices never replays the old one.
+export function synthesize(text: string, voiceId = DEFAULT_VOICE_ID): Promise<Narration> {
+  const key = `${voiceId}\n${text}`;
+  let request = cache.get(key);
   if (!request) {
-    request = fetchNarration(text);
-    cache.set(text, request);
-    request.catch(() => cache.delete(text));
+    request = fetchNarration(text, voiceId);
+    cache.set(key, request);
+    request.catch(() => cache.delete(key));
   }
   return request;
 }
 
-async function fetchNarration(text: string): Promise<Narration> {
+async function fetchNarration(text: string, voiceId: string): Promise<Narration> {
   if (!API_KEY) throw new ElevenLabsError(MISSING_KEY_MESSAGE);
 
   // One deadline for the whole exchange, including downloading the audio,
@@ -77,7 +79,7 @@ async function fetchNarration(text: string): Promise<Narration> {
     let res: Response;
     try {
       res = await Promise.race([
-        fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/with-timestamps`, {
+        fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`, {
           method: 'POST',
           headers: { 'xi-api-key': API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ text, model_id: MODEL }),
