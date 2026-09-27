@@ -29,6 +29,9 @@ const isEnvelope = (body: unknown): body is Envelope<unknown> =>
 
 export type ApiClient = <T>(path: string, init?: { method?: string; body?: unknown }) => Promise<T>;
 
+// Trades the Auth0 token for the backend's cookie (backend/app/rest/user/user-router.ts).
+const LOGIN_PATH = '/user/mobile-login';
+
 export function createApiClient(options: {
   baseUrl: string;
   // A current access token, or null when signed out.
@@ -40,9 +43,7 @@ export function createApiClient(options: {
 }): ApiClient {
   const { baseUrl, getToken, onUnauthorized, timeoutMs = 15_000, fetchImpl = fetch } = options;
 
-  return async function request<T>(path: string, init: { method?: string; body?: unknown } = {}) {
-    if (!baseUrl) throw new ApiError(0, 'The server address is not set up (EXPO_PUBLIC_API_URL).');
-
+  async function send(path: string, init: { method?: string; body?: unknown }) {
     const token = await getToken();
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -56,6 +57,8 @@ export function createApiClient(options: {
         method: init.method ?? 'GET',
         headers,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        // The backend knows the user by its "userinfo" cookie.
+        credentials: 'include',
         signal: controller.signal,
       });
     } catch {
@@ -66,6 +69,20 @@ export function createApiClient(options: {
 
     const body: unknown = await res.json().catch(() => null);
     const status = isEnvelope(body) && body.code >= 400 ? body.code : res.status;
+    return { status, body };
+  }
+
+  return async function request<T>(path: string, init: { method?: string; body?: unknown } = {}) {
+    if (!baseUrl) throw new ApiError(0, 'The server address is not set up (EXPO_PUBLIC_API_URL).');
+
+    let { status, body } = await send(path, init);
+
+    // No backend cookie yet (first request, or it expired): trade the Auth0
+    // token for one once, then retry.
+    if (status === 401 && path !== LOGIN_PATH) {
+      const login = await send(LOGIN_PATH, { method: 'POST' });
+      if (login.status < 400) ({ status, body } = await send(path, init));
+    }
 
     if (status === 401) {
       onUnauthorized();

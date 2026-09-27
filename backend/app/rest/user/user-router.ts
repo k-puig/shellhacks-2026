@@ -1,12 +1,8 @@
 import { Hono } from "hono";
-import {
-  deleteCookie,
-  getCookie,
-  getSignedCookie,
-  setSignedCookie,
-} from "hono/cookie";
+import { deleteCookie, getCookie, getSignedCookie } from "hono/cookie";
 import { auth, callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
+import { writeUserCookie } from "@app/rest/lib/auth/current-user.ts";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
   changeUserProfilePictureRequestZObject,
@@ -101,19 +97,60 @@ export function createUserRouter(
       authId: parsedUserData.data.sub,
     });
 
-    await setSignedCookie(
-      c,
-      "userinfo",
-      JSON.stringify(userInfo),
-      cookieSecret,
-      {
-        path: "/",
-        secure: false,
-        httpOnly: true,
-      },
-    );
+    await writeUserCookie(c, userInfo);
 
     return c.redirect("/", 302);
+  });
+
+  // The phone's login. The app signs in with Auth0 itself (the "DODO Mobile"
+  // native app), then trades its access token for the same cookie the website
+  // gets. Auth0's /userinfo confirms the token and says who it belongs to.
+  user.post("/mobile-login", async (c) => {
+    const token = c.req.header("Authorization")?.match(/^Bearer\s+(.+)$/i)
+      ?.[1];
+    if (!token) {
+      return c.json(
+        { code: 401, message: "Missing login token", content: null },
+        401,
+      );
+    }
+
+    const domain = (Deno.env.get("AUTH0_DOMAIN") ?? "")
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/+$/, "");
+    const res = await fetch(`https://${domain}/userinfo`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+    if (!res?.ok) {
+      return c.json(
+        { code: 401, message: "Login token was rejected", content: null },
+        401,
+      );
+    }
+
+    const profile = await z.object({
+      sub: z.string(),
+      name: z.string().optional(),
+      nickname: z.string().optional(),
+      email: z.string().optional(),
+    }).safeParseAsync(await res.json());
+    if (!profile.success) {
+      return c.json(
+        { code: 401, message: "Unexpected Auth0 profile", content: null },
+        401,
+      );
+    }
+
+    const { sub, name, nickname, email } = profile.data;
+    const userInfo = await userService.createUserOrDoNothing({
+      id: crypto.randomUUID(),
+      username: name ?? nickname ?? email ?? "Reader",
+      authId: sub,
+    });
+    await writeUserCookie(c, userInfo);
+
+    return c.json(userInfo, 200);
   });
 
   user.delete("/delete", async (c) => {

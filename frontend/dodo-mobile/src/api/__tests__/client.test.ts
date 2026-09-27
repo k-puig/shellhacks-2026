@@ -66,3 +66,30 @@ describe('createApiClient', () => {
     await expect(api('/book')).rejects.toMatchObject({ status: 0 });
   });
 });
+
+describe('backend login', () => {
+  it('logs into the backend once on a 401, then retries', async () => {
+    const replies = [
+      reply(401, { code: 401, message: 'Not logged in', content: null }),
+      reply(200, { code: 200, message: 'ok', content: { id: 'u1' } }),
+      reply(200, { code: 200, message: 'ok', content: ['book'] }),
+    ];
+    const fetchImpl = jest.fn(async () => replies.shift() as Response);
+    const onUnauthorized = jest.fn();
+    const api = createApiClient({
+      baseUrl: 'https://dodo.test',
+      getToken: async () => 'token-1',
+      onUnauthorized,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(api('/book')).resolves.toEqual(['book']);
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([url, init]) => `${init.method} ${url}`)).toEqual([
+      'GET https://dodo.test/api/v1/book',
+      'POST https://dodo.test/api/v1/user/mobile-login',
+      'GET https://dodo.test/api/v1/book',
+    ]);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+});
