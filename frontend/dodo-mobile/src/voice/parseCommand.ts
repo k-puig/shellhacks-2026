@@ -25,7 +25,7 @@ const QUESTION =
 // "What happened in the last chapter?" is a question, not chapter navigation.
 const RECAP = /\bhappen(?:ed|s)?\b|\bremind me\b|\brecap\b|\bsummar/;
 
-// Turns the words spoken after "Hey DODO" into an action.
+// Turns the words spoken after "Hey Nova" into an action.
 export function parseCommand(raw: string): Command {
   const text = raw.toLowerCase().replace(/[.,!?]/g, '').trim();
 

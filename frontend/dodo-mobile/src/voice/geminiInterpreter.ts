@@ -2,7 +2,7 @@ import { generateJson } from '@/ai/gemini';
 import type { Paragraph } from '@/data/mockBooks';
 import { HIGHLIGHT_COLOR_NAMES, type HighlightColorName } from '@/theme';
 
-// Turns what the user said after "Hey DODO" into a precise highlight or note,
+// Turns what the user said after "Hey Nova" into a precise highlight or note,
 // using Gemini to understand the request against the text they just heard.
 
 export { isGeminiConfigured } from '@/ai/gemini';
@@ -55,7 +55,7 @@ export function recentSentences(sentences: Sentence[], currentIdx: number): Sent
   return sentences.slice(Math.max(0, end - CONTEXT_SENTENCES + 1), end + 1);
 }
 
-const SYSTEM_PROMPT = `You are DODO, the voice assistant inside an audiobook app. The user is listening to a book and just said a command after "Hey DODO". Decide what they want saved.
+const SYSTEM_PROMPT = `You are DODO, the voice assistant inside an audiobook app. The user is listening to a book and just said a command after "Hey Nova". Decide what they want saved.
 
 You get the command (an English speech transcript, so expect filler words and small mishearings) and the most recent sentences of the book, oldest first, each with an id. The LAST sentence is the one being read right now.
 

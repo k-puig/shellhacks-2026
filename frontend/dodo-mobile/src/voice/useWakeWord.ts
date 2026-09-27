@@ -14,13 +14,13 @@ const t0 = Date.now();
 const vlog = (...args: unknown[]) =>
   console.log(`[dodo-voice] ${((Date.now() - t0) / 1000).toFixed(2)}s`, ...args);
 
-// idle: not listening for "Hey DODO" (turned off in Settings); the mic button still works.
+// idle: not listening for "Hey Nova" (turned off in Settings); the mic button still works.
 export type VoiceStatus = 'starting' | 'listening' | 'awake' | 'idle' | 'denied' | 'error';
 
 
 // How long to wait after the last word before treating the command as finished.
 const COMMAND_SILENCE_MS = 1300;
-// How long to wait for a command after a bare "Hey DODO".
+// How long to wait for a command after a bare "Hey Nova".
 const WAKE_TIMEOUT_MS = 5000;
 // Give up after this many back-to-back failures (e.g. no usable mic).
 const MAX_FAILURES = 5;
@@ -30,7 +30,7 @@ const MAX_FAILURES = 5;
 const SESSION_REFRESH_MS = 45_000;
 const ON_DEVICE_REFRESH_MS = 5 * 60_000;
 // In the background, keep listening this long after narration pauses, so
-// "Hey DODO, pause" … "Hey DODO, play" works with the screen locked.
+// "Hey Nova, pause" … "Hey Nova, play" works with the screen locked.
 const BACKGROUND_GRACE_MS = 2 * 60_000;
 
 type Options = {
@@ -39,7 +39,7 @@ type Options = {
   onCancel: () => void;
   // Speech to drop, e.g. the narrator's voice picked up by the mic.
   ignore?: (text: string) => boolean;
-  // Keep listening for "Hey DODO" (default). When false, only the mic button listens.
+  // Keep listening for "Hey Nova" (default). When false, only the mic button listens.
   alwaysListen?: boolean;
   // Keep listening with the app in the background (screen locked, another app
   // open). The reader sets this while the book is being narrated.
@@ -47,7 +47,7 @@ type Options = {
 };
 
 // Always-on listener: keeps continuous recognition running, watches the
-// transcript for "Hey DODO", then hands whatever follows it to onCommand.
+// transcript for "Hey Nova", then hands whatever follows it to onCommand.
 export function useWakeWord({
   onWake,
   onCommand,
@@ -93,7 +93,7 @@ export function useWakeWord({
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // In the background (screen locked, app switched) we keep listening only while
   // the book is being narrated, and for BACKGROUND_GRACE_MS after it pauses so
-  // "Hey DODO, play" still works; otherwise we stop and start fresh when the app
+  // "Hey Nova, play" still works; otherwise we stop and start fresh when the app
   // is active again. iOS allows this because the "audio" background mode is on
   // and the mic's audio session is already running when the app leaves.
   const foreground = useRef(AppState.currentState === 'active');
@@ -114,10 +114,10 @@ export function useWakeWord({
       lang: 'en-US',
       interimResults: true,
       continuous: true,
-      // Several guesses per phrase: in a noisy room "hey dodo" is often not the 1st.
+      // Several guesses per phrase: in a noisy room "hey nova" is often not the 1st.
       maxAlternatives: 5,
       requiresOnDeviceRecognition: onDevice.current,
-      contextualStrings: ['Hey DODO', 'DODO'],
+      contextualStrings: ['Hey Nova', 'Nova'],
       androidIntentOptions: {
         // Don't end the session after a short silence while we wait for the wake word.
         EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 10_000,
@@ -135,7 +135,7 @@ export function useWakeWord({
       // audio session into "voiceChat" (phone-call) mode, which routes the
       // narrator to the earpiece and ducks its volume, flipping back and forth
       // on every recognition restart. Without it the mic may pick up the
-      // narration, which is harmless: the book never says "Hey DODO".
+      // narration, which is harmless: the book never says "Hey Nova".
       iosVoiceProcessingEnabled: false,
     });
   };
@@ -186,11 +186,11 @@ export function useWakeWord({
 
   useSpeechRecognitionEvent('end', () => {
     vlog('event end', { enabled: enabled.current, foreground: foreground.current, failures: failures.current });
-    // Restart right away normally, so "Hey DODO" is heard again quickly; back
+    // Restart right away normally, so "Hey Nova" is heard again quickly; back
     // off while it keeps failing.
     running.current = false;
     const delay = failures.current ? 250 * 2 ** failures.current : 100;
-    // With "Hey DODO" off, only keep going while a tapped command is pending.
+    // With "Hey Nova" off, only keep going while a tapped command is pending.
     const keepListening = alwaysListenRef.current || awake.current;
     if (enabled.current && canListen() && keepListening) scheduleStart(delay);
   });
@@ -229,7 +229,7 @@ export function useWakeWord({
   useSpeechRecognitionEvent('result', (event) => {
     vlog('event result', { final: event.isFinal, draining: draining.current, awake: awake.current }, JSON.stringify(event.results.map((r) => r.transcript)));
     if (draining.current) return;
-    // "Hey DODO" is off: only a mic-button command is listened to.
+    // "Hey Nova" is off: only a mic-button command is listened to.
     if (!alwaysListenRef.current && !awake.current) return;
     failures.current = 0;
 
@@ -342,7 +342,7 @@ export function useWakeWord({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // "Hey DODO" switched on or off in Settings while the reader is open.
+  // "Hey Nova" switched on or off in Settings while the reader is open.
   const firstRun = useRef(true);
   useEffect(() => {
     alwaysListenRef.current = alwaysListen;
@@ -385,11 +385,11 @@ export function useWakeWord({
   // Turn listening back on after it gave up (tap on "Voice unavailable").
   const retry = startFresh;
 
-  // Same as saying "Hey DODO": for the mic button, when the room is too loud.
+  // Same as saying "Hey Nova": for the mic button, when the room is too loud.
   const wake = () => {
     if (awake.current || !enabled.current) return;
     vlog('wake() by tap');
-    // With "Hey DODO" off the mic isn't running yet: start it for this command.
+    // With "Hey Nova" off the mic isn't running yet: start it for this command.
     const fresh = !running.current;
     if (fresh) start();
     awake.current = true;

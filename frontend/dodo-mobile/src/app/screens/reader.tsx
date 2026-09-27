@@ -221,14 +221,14 @@ function Reader({ book }: { book: Book }) {
 
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Where narration resumes after an answer: the sentence being read when the
-  // listener said "Hey DODO" or tapped the mic.
+  // listener said "Hey Nova" or tapped the mic.
   const resumeFrom = useRef<number | null>(null);
   // Bumped per question so a slow answer can't play over a newer one.
   const askSession = useRef(0);
   // The answer being spoken, so the mic ignores DODO's own voice too.
   const answerEcho = useRef('');
 
-  // A tap when "Hey DODO" is heard, a success buzz when a command is carried out.
+  // A tap when "Hey Nova" is heard, a success buzz when a command is carried out.
   // (Both off when haptics are turned off in Settings.)
   const buzzWake = () => {
     if (settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -385,7 +385,7 @@ function Reader({ book }: { book: Book }) {
         break;
       case 'note':
         if (!command.content) {
-          say('Say "Hey DODO, note…" followed by your note');
+          say('Say "Hey Nova, note…" followed by your note');
           break;
         }
         addNote(idx, command.content);
@@ -475,7 +475,7 @@ function Reader({ book }: { book: Book }) {
   };
 
   const understand = (text: string, command: Command) => {
-    // A newer "Hey DODO" makes a late "answer" result stale.
+    // A newer "Hey Nova" makes a late "answer" result stale.
     const mySession = askSession.current;
     const idx = narration.currentIdxRef.current;
     const context = recentSentences(sentences, idx);
@@ -505,7 +505,7 @@ function Reader({ book }: { book: Book }) {
         } else if (command.type === 'note' && command.content) {
           addNote(idx, command.content);
           buzzDone();
-        } else if (command.type === 'note') say('Say "Hey DODO, note…" followed by your note');
+        } else if (command.type === 'note') say('Say "Hey Nova, note…" followed by your note');
         else say(`Didn't catch that: “${text}”`);
       });
   };
@@ -524,7 +524,7 @@ function Reader({ book }: { book: Book }) {
   const voice = useWakeWord({
     onWake: () => {
       buzzWake();
-      // A new "Hey DODO" interrupts an answer (the narrator rewinds first).
+      // A new "Hey Nova" interrupts an answer (the narrator rewinds first).
       askSession.current++;
       // Drop a stale "Thinking…" or previous answer so "Listening…" shows.
       if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
@@ -558,7 +558,7 @@ function Reader({ book }: { book: Book }) {
     },
     // Not until saved settings load, so a saved "off" never briefly turns the mic on.
     alwaysListen: settingsLoaded && settings.wakeWord,
-    // "Hey DODO" keeps working with the screen locked while the book is read aloud.
+    // "Hey Nova" keeps working with the screen locked while the book is read aloud.
     keepInBackground: narration.isPlaying,
     ignore: (text) =>
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
@@ -788,7 +788,7 @@ function Reader({ book }: { book: Book }) {
 
   const statusLabel = {
     starting: 'Starting microphone…',
-    listening: 'Say “Hey DODO”',
+    listening: 'Say “Hey Nova”',
     idle: 'Tap the mic to talk',
     awake: voice.heard ? `“${voice.heard}”` : 'Listening…',
     denied: 'Microphone access denied, enable it in Settings',
@@ -949,7 +949,7 @@ function Reader({ book }: { book: Book }) {
             />
           </IdleFade>
 
-          {/* Same as saying "Hey DODO", for when the room is too loud. */}
+          {/* Same as saying "Hey Nova", for when the room is too loud. */}
           <IdleFade visible={showSideButtons}>
             <ActionButton
               icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}

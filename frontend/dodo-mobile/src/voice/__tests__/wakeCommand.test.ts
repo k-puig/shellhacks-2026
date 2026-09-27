@@ -2,23 +2,23 @@ import { readResult } from '../wakeCommand';
 
 describe('readResult', () => {
   it('finds the command after the wake word', () => {
-    expect(readResult(['Hey DODO, pause'], false)).toEqual({ woke: true, command: 'pause' });
+    expect(readResult(['Hey Nova, pause'], false)).toEqual({ woke: true, command: 'pause' });
   });
 
   it('wakes with an empty command when only the wake word was said', () => {
-    expect(readResult(['hey dodo'], false)).toEqual({ woke: true, command: '' });
+    expect(readResult(['hey nova'], false)).toEqual({ woke: true, command: '' });
   });
 
   it('uses the first alternative that contains the wake word', () => {
-    expect(readResult(['hey toe toe play', 'hey dodo play'], false)).toEqual({
+    expect(readResult(['hey noah play', 'hey nova play'], false)).toEqual({
       woke: true,
       command: 'play',
     });
   });
 
   it('prefers an alternative that also has the command (heard on a real iPhone)', () => {
-    expect(readResult([' Hey DODO', ' Hey DODO pause'], true)).toEqual({ woke: true, command: 'pause' });
-    expect(readResult(['Hey DODO', 'Hey Dodo'], false)).toEqual({ woke: true, command: '' });
+    expect(readResult([' Hey Nova', ' Hey Nova pause'], true)).toEqual({ woke: true, command: 'pause' });
+    expect(readResult(['Hey Nova', 'Hey nova'], false)).toEqual({ woke: true, command: '' });
   });
 
   it('ignores speech without the wake word while asleep', () => {
@@ -36,23 +36,25 @@ describe('readResult', () => {
 
 describe('wake word variants heard in noise', () => {
   it.each([
-    'hey doe doe pause',
-    'hey do-do pause',
-    'hey doh doh pause',
-    'hey doodoo pause',
-    'hey todo pause',
-    "hey dodo's pause",
-    'Hey. Dodo, pause',
-    'okay dodo pause',
+    'hey no va pause',
+    'hey no-va pause',
+    'hey novah pause',
+    'hey noba pause',
+    "hey nova's pause",
+    'Hey. Nova, pause',
+    'okay nova pause',
+    'Hanover pause',
+    'hanova pause',
   ])('wakes on "%s"', (heard) => {
     expect(readResult([heard], false)).toEqual({ woke: true, command: 'pause' });
   });
 
   it.each([
+    'The nova suddenly flared',
+    'said Nova, and everybody',
+    'Hey! said Nova',
+    'a supernova',
     'The Dodo suddenly called out',
-    'said the Dodo, and everybody',
-    'Hey! said the Dodo',
-    'a dodo',
   ])('does not wake on book text "%s"', (heard) => {
     expect(readResult([heard], false)).toBeNull();
   });

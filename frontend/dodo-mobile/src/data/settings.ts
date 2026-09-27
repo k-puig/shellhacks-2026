@@ -33,7 +33,7 @@ export type Settings = {
   voiceId: string;
   rate: number;
   resumeAfterAnswer: ResumeAfterAnswer;
-  // Always listen for "Hey DODO"; when off, the mic button still works.
+  // Always listen for "Hey Nova"; when off, the mic button still works.
   wakeWord: boolean;
   haptics: boolean;
   highlightColor: HighlightColorName;

@@ -219,12 +219,12 @@ export default function SettingsScreen() {
 
         <Section
           title="Voice control"
-          footer="With “Hey DODO” off, tap the mic in the reader to give a command.">
+          footer="With “Hey Nova” off, tap the mic in the reader to give a command.">
           <Row
             first
             symbol={icon('mic.fill', 'mic')}
             tint={HIGHLIGHT_COLORS.purple}
-            label="Listen for “Hey DODO”"
+            label="Listen for “Hey Nova”"
             right={
               <Switch
                 value={settings.wakeWord}

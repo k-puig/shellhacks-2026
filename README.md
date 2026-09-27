@@ -1,6 +1,6 @@
 # DODO
 
-A voice-controlled audiobook reader, built at ShellHacks 2026. You listen to a book read aloud on your iPhone and control it hands-free: **"Hey DODO, pause"**, "faster", "next chapter", "highlight that", "note …", or ask about the story ("Who is the Dodo?").
+A voice-controlled audiobook reader, built at ShellHacks 2026. You listen to a book read aloud on your iPhone and control it hands-free: **"Hey Nova, pause"**, "faster", "next chapter", "highlight that", "note …", or ask about the story ("Who is the Dodo?").
 
 ## What's in this repo
 

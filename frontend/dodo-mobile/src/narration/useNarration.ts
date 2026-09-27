@@ -32,7 +32,7 @@ export function useNarration(book: Book) {
   const { settings, update: updateSettings } = useSettings();
 
   // keepAudioSessionActive: pausing must not deactivate the iOS audio
-  // session, or the always-on "Hey DODO" listener loses the mic.
+  // session, or the always-on "Hey Nova" listener loses the mic.
   const player = useAudioPlayer(null, {
     updateInterval: UPDATE_INTERVAL_MS,
     keepAudioSessionActive: true,
