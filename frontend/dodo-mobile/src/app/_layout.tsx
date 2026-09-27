@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { Appearance } from 'react-native';
 
+import { IntroDoneContext } from '@/components/BrandMark';
 import { IntroAnimation } from '@/components/IntroAnimation';
 import { LibraryProvider } from '@/data/libraryStore';
 import { SettingsProvider } from '@/data/settingsStore';
@@ -16,13 +17,15 @@ export default function RootLayout() {
   return (
     <SettingsProvider>
       <LibraryProvider>
-        <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* Opened from the gear on Home; swipe down to close. */}
-          <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
-        </Stack>
-        {/* Plays once per launch over Home, which renders underneath. */}
-        {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
+        <IntroDoneContext.Provider value={!showIntro}>
+          <StatusBar style="light" />
+          <Stack screenOptions={{ headerShown: false }}>
+            {/* Opened from the gear on Home; swipe down to close. */}
+            <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
+          </Stack>
+          {/* Plays once per launch over Home, which renders underneath. */}
+          {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
+        </IntroDoneContext.Provider>
       </LibraryProvider>
     </SettingsProvider>
   );

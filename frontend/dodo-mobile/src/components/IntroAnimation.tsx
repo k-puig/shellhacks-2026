@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -15,10 +15,9 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { body, brandStyles, K, leg, TAGLINE } from '@/components/BrandMark';
 import { colors } from '@/theme';
 
-// Artwork is drawn on a 220×200 grid (see assets/images/dodo); K scales it on screen.
-const K = 0.6;
 const WORD = 'dodo';
 
 // Strong ease-out: quick to arrive, gentle to settle.
@@ -50,8 +49,6 @@ const EGG_W = 30 * K;
 const EGG_H = 38 * K;
 const EGG_START_Y = -240;
 
-const body = require('../../assets/images/dodo/body.svg');
-const leg = require('../../assets/images/dodo/leg.svg');
 const egg = require('../../assets/images/dodo/egg.svg');
 
 function Letter({ char, progress, reduceMotion }: {
@@ -63,7 +60,7 @@ function Letter({ char, progress, reduceMotion }: {
     opacity: progress.value,
     transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 6 }],
   }));
-  return <Animated.Text style={[styles.wordmark, style]}>{char}</Animated.Text>;
+  return <Animated.Text style={[brandStyles.wordmark, style]}>{char}</Animated.Text>;
 }
 
 // Launch intro: the dodo walks in, an egg bonks it on the head, then the
@@ -209,29 +206,34 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
 
   return (
     <Animated.View style={[styles.overlay, overlayStyle]}>
-      <Pressable style={styles.center} onPress={finish} accessibilityLabel="Skip intro">
-        <View style={styles.stage}>
-          <Animated.View style={[styles.bird, birdStyle]}>
-            <Animated.View style={[styles.leg, { left: 82 * K }, legBStyle]}>
-              <Image source={leg} style={styles.fill} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityLabel="Skip intro">
+        {/* Same layout as the welcome screen's BrandMark, so the hand-off doesn't jump. */}
+        <View style={brandStyles.layer}>
+          <View style={brandStyles.stage}>
+            <Animated.View style={[brandStyles.bird, styles.bird, birdStyle]}>
+              <Animated.View style={[brandStyles.leg, brandStyles.legB, legBStyle]}>
+                <Image source={leg} style={brandStyles.fill} />
+              </Animated.View>
+              <Animated.View style={[brandStyles.leg, brandStyles.legA, legAStyle]}>
+                <Image source={leg} style={brandStyles.fill} />
+              </Animated.View>
+              <Image source={body} style={brandStyles.body} />
             </Animated.View>
-            <Animated.View style={[styles.leg, { left: 110 * K }, legAStyle]}>
-              <Image source={leg} style={styles.fill} />
-            </Animated.View>
-            <Image source={body} style={styles.body} />
-          </Animated.View>
-          {!reduceMotion && (
-            <Animated.View style={[styles.egg, eggStyle]}>
-              <Image source={egg} style={styles.fill} />
-            </Animated.View>
-          )}
+            {!reduceMotion && (
+              <Animated.View style={[styles.egg, eggStyle]}>
+                <Image source={egg} style={brandStyles.fill} />
+              </Animated.View>
+            )}
+          </View>
+          <View style={brandStyles.word} accessible accessibilityLabel={WORD}>
+            {WORD.split('').map((char, i) => (
+              <Letter key={i} char={char} progress={letters[i]} reduceMotion={reduceMotion} />
+            ))}
+          </View>
+          <Animated.View style={[brandStyles.line, lineStyle]} />
+          {/* Holds the tagline's space (it appears on the welcome screen). */}
+          <Text style={[brandStyles.tagline, styles.hidden]}>{TAGLINE}</Text>
         </View>
-        <View style={styles.word} accessible accessibilityLabel={WORD}>
-          {WORD.split('').map((char, i) => (
-            <Letter key={i} char={char} progress={letters[i]} reduceMotion={reduceMotion} />
-          ))}
-        </View>
-        <Animated.View style={[styles.line, lineStyle]} />
       </Pressable>
     </Animated.View>
   );
@@ -247,12 +249,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     zIndex: 10,
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  stage: { width: 220 * K, height: 200 * K, marginBottom: 20 },
   // Squashes from the feet when the egg lands.
-  bird: { width: 220 * K, height: 200 * K, transformOrigin: 'bottom' },
-  body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
-  leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K, transformOrigin: 'top' },
+  bird: { transformOrigin: 'bottom' },
   // Contact position: bottom edge just into the top of the head (HEAD_TOP).
   egg: {
     position: 'absolute',
@@ -261,21 +259,5 @@ const styles = StyleSheet.create({
     width: EGG_W,
     height: EGG_H,
   },
-  fill: { width: '100%', height: '100%' },
-  word: { flexDirection: 'row' },
-  wordmark: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: '600',
-    letterSpacing: 6,
-  },
-  // Draws from the left edge (transformOrigin) as it scales in.
-  line: {
-    width: 44,
-    height: 2,
-    borderRadius: 1,
-    marginTop: 14,
-    backgroundColor: colors.accent,
-    transformOrigin: 'left',
-  },
+  hidden: { opacity: 0 },
 });

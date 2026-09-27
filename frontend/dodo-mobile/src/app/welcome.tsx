@@ -1,83 +1,91 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/useAuth';
+import { BrandMark, useIntroDone } from '@/components/BrandMark';
 import { colors } from '@/theme';
 
-// Artwork is drawn on a 220×200 grid (see assets/images/dodo); K scales it on screen.
-const K = 0.6;
-const body = require('../../assets/images/dodo/body.svg');
-const leg = require('../../assets/images/dodo/leg.svg');
+// Matches the intro's strong ease-out.
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+const ENTER_MS = 420;
+const STAGGER_MS = 70;
 
-// Sign up / log in, in the same look as the launch intro it follows.
+// Rises into place once the intro has handed off (fades only with Reduce Motion).
+const useEnter = (progress: SharedValue<number>, reduceMotion: boolean) =>
+  useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 10 }],
+  }));
+
+// Sign up / log in. The brand sits exactly where the launch intro leaves it
+// (same BrandMark layout), so the intro fades into this page without a jump;
+// then the tagline and buttons come in and the dodo breathes while it waits.
 export default function WelcomeScreen() {
-  const { login, signUp, isAuthenticated, isLoading } = useAuth();
+  const { login, signUp, isAuthenticated } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const introDone = useIntroDone();
+  const reduceMotion = useReducedMotion();
 
   // If a valid session exists or login succeeds, route to Home
   useEffect(() => {
     if (isAuthenticated) router.replace('/screens/home');
   }, [isAuthenticated, router]);
 
-  if (isLoading) {
-    return (
-      <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  const tagline = useSharedValue(0);
+  const signUpButton = useSharedValue(0);
+  const logInButton = useSharedValue(0);
+  useEffect(() => {
+    if (!introDone) return;
+    const enter = { duration: reduceMotion ? 240 : ENTER_MS, easing: EASE_OUT };
+    [tagline, signUpButton, logInButton].forEach((value, i) => {
+      value.value = withDelay(i * STAGGER_MS, withTiming(1, enter));
+    });
+  }, [introDone, reduceMotion, tagline, signUpButton, logInButton]);
+  const taglineStyle = useEnter(tagline, reduceMotion);
+  const signUpStyle = useEnter(signUpButton, reduceMotion);
+  const logInStyle = useEnter(logInButton, reduceMotion);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.brand}>
-        <View style={styles.bird}>
-          <Image source={leg} style={[styles.leg, { left: 82 * K }]} />
-          <Image source={leg} style={[styles.leg, { left: 110 * K }]} />
-          <Image source={body} style={styles.body} />
-        </View>
-        <Text style={styles.wordmark}>dodo</Text>
-        <View style={styles.line} />
-        <Text style={styles.tagline}>Hands-free, voice-guided reading</Text>
-      </View>
+    <View style={styles.screen}>
+      <BrandMark breathing={introDone} taglineStyle={taglineStyle} />
 
-      <View style={styles.actions}>
-        <Pressable
-          style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
-          onPress={() => signUp()}
-          accessibilityRole="button">
-          <Text style={styles.primaryText}>Sign up</Text>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
-          onPress={() => login()}
-          accessibilityRole="button">
-          <Text style={styles.secondaryText}>Log in</Text>
-        </Pressable>
+      <View style={[styles.actions, { paddingBottom: insets.bottom + 24 }]}>
+        <Animated.View style={signUpStyle}>
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
+            onPress={() => signUp()}
+            accessibilityRole="button">
+            <Text style={styles.primaryText}>Sign up</Text>
+          </Pressable>
+        </Animated.View>
+        <Animated.View style={logInStyle}>
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
+            onPress={() => login()}
+            accessibilityRole="button">
+            <Text style={styles.secondaryText}>Log in</Text>
+          </Pressable>
+        </Animated.View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: 24 },
-  center: { justifyContent: 'center', alignItems: 'center' },
-  brand: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bird: { width: 220 * K, height: 200 * K, marginBottom: 20 },
-  body: { position: 'absolute', top: 0, left: 0, width: 220 * K, height: 180 * K },
-  leg: { position: 'absolute', top: 148 * K, width: 30 * K, height: 44 * K },
-  wordmark: { color: colors.text, fontSize: 30, fontWeight: '600', letterSpacing: 6 },
-  line: {
-    width: 44,
-    height: 2,
-    borderRadius: 1,
-    marginTop: 14,
-    backgroundColor: colors.accent,
-  },
-  tagline: { color: colors.textSecondary, fontSize: 15, marginTop: 18, textAlign: 'center' },
-  actions: { gap: 12, paddingBottom: 24 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  actions: { position: 'absolute', left: 24, right: 24, bottom: 0, gap: 12 },
   button: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   primary: { backgroundColor: colors.accent },
   primaryText: { color: colors.background, fontSize: 16, fontWeight: '600' },
