@@ -6,10 +6,10 @@
     "experimentalDecorators": true
   },
   "imports": {
-    "@app/": "../../app/",
-    "@package/": "../",
-    "@postgresql-schema/": "./schema/postgresql-schema/",
-    "@mongodb-schema/": "./schema/mongodb-schema/",
+    "@app/": "../../../../app/",
+    "@package/": "../../../",
+    "@postgresql-schema/": "./",
+    "@mongodb-schema/": "../mongodb-schema/",
     "@mikro-orm/core": "npm:@mikro-orm/core@^7.2.1",
     "@mikro-orm/decorators/legacy": "npm:@mikro-orm/decorators@^7.2.1/legacy",
     "@mikro-orm/mongodb": "npm:@mikro-orm/mongodb@^7.2.1",

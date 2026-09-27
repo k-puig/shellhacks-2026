@@ -10,19 +10,17 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-const hostname = requiredEnv("AWS_S3_HOSTNAME");
-const port = Deno.env.get("AWS_S3_PORT");
-const sessionToken = Deno.env.get("AWS_S3_SESSION_TOKEN");
+const hostname = "rustfs";
+const port = "9000";
 
-export const S3_BUCKET = requiredEnv("AWS_S3_BUCKET");
+export const EPUB_S3_BUCKET = "epub";
 
 export const S3settings: S3ClientConfig = {
   region: Deno.env.get("AWS_REGION") ?? "us-east-1",
   forcePathStyle: true,
   credentials: {
-    accessKeyId: requiredEnv("AWS_S3_ACCESS_KEY_ID"),
-    secretAccessKey: requiredEnv("AWS_S3_SECRET_KEY"),
-    ...(sessionToken ? { sessionToken } : {}),
+    accessKeyId: requiredEnv("RUSTFS_ACCESS_KEY"),
+    secretAccessKey: requiredEnv("RUSTFS_SECRET_KEY"),
   },
   endpoint: `http://${hostname}${port ? `:${port}` : ""}`,
 };

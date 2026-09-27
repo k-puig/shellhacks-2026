@@ -4,8 +4,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - PGSQL_HOST=psql
-      - PGSQL_PORT=5432
+      - PGSQL_HOST=${POSTGRES_HOST}
+      - PGSQL_PORT=${POSTGRES_PORT}
       - PGSQL_DATABASE=${POSTGRES_DB}
       - PGSQL_USER_NAME=${POSTGRES_USER}
       - PGSQL_PASSWORD=${POSTGRES_PASSWORD}
@@ -14,6 +14,9 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - BASE_URL=${BASE_URL}
       - COOKIE_SECRET=${COOKIE_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
     depends_on:
       psql:
         condition: service_healthy
@@ -78,9 +81,6 @@ services:
   rustfs:
     image: rustfs/rustfs:latest
     container_name: rustfs
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
       - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
       - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}

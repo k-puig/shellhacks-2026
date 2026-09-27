@@ -16,11 +16,6 @@ export function createUserRouter(
   userService: UserService,
 ): Hono<OIDCEnv> {
   // Initialize router with auth middleware
-  const baseURL = Deno.env.get("BASE_URL");
-
-  if (baseURL !== "http://localhost:5173") {
-    throw new Error(`Unexpected BASE_URL: ${JSON.stringify(baseURL)}`);
-  }
   const user = new Hono<OIDCEnv>();
   user.use(
     auth({
@@ -29,7 +24,7 @@ export function createUserRouter(
       clientSecret: Deno.env.get("AUTH0_CLIENT_SECRET"),
       baseURL: Deno.env.get("BASE_URL"),
       session: {
-        secret: "password_at_least_32_characters_long",
+        secret: Deno.env.get("SESSION_SECRET"),
       },
       routes: {
         login: "/api/v1/user/login",
@@ -40,6 +35,11 @@ export function createUserRouter(
       authRequired: false,
     }),
   );
+
+  const cookieSecret = Deno.env.get("COOKIE_SECRET");
+  if (!cookieSecret) {
+    throw new Error("No cookie secret given");
+  }
 
   // Remove every cookie sent to this backend before ending the Auth0 session.
   // All backend-issued cookies use the root path, which must match to expire them.
@@ -55,7 +55,7 @@ export function createUserRouter(
   user.get("/", async (c) => {
     const cookie = await getSignedCookie(
       c,
-      "secret",
+      cookieSecret,
       "userinfo",
     );
     try {
@@ -102,7 +102,7 @@ export function createUserRouter(
       c,
       "userinfo",
       JSON.stringify(userInfo),
-      "secret",
+      cookieSecret,
       {
         path: "/",
         secure: false,
