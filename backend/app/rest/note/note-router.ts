@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
-    CreateNoteRequestZObj,
-    DeleteNoteRequestZObj,
-    FetchNoteRequestZObj,
-    FetchNotesByBookRequestZObj,
-    UpdateNoteRequestZObj,
+    changeNoteByBookRequestZobj,
+    createNoteRequestZObj,
+    deleteNoteRequestZObj,
+    fetchNoteRequestZObj,
+    updateNoteRequestZObj,
 } from "@app/rest/note/dtos/note-request-dto.ts";
 import { NoteService } from "@app/rest/note/note-service.ts";
 
@@ -16,7 +16,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
     note.post("/", async (c) => {
     try {
         const body = await c.req.json();
-        const parsedBody = await CreateNoteRequestZObj.safeParseAsync(body);
+        const parsedBody = await createNoteRequestZObj.safeParseAsync(body);
 
         if (!parsedBody.success) {
         return c.json(
@@ -29,13 +29,13 @@ export function createNoteRouter(noteService: NoteService): Hono {
         );
         }
         const response = await noteService.createNote(parsedBody.data);
-        return c.json(response, response.code as any);
+        return c.json(response, response.code);
     } 
     catch (error) {
         if (error instanceof BaseError) {
             return c.json(
             { code: error.code, message: error.message, content: null },
-            error.code as any,
+            error.code,
             );
         }
         throw error;
@@ -46,7 +46,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
     note.get("/book/:bookId", async (c) => {
         try {
             const bookId = c.req.param("bookId");
-            const parsed = await FetchNotesByBookRequestZObj.safeParseAsync({ bookId });
+            const parsed = await changeNoteByBookRequestZobj.safeParseAsync({ bookId });
 
         if (!parsed.success) {
             return c.json(
@@ -60,13 +60,13 @@ export function createNoteRouter(noteService: NoteService): Hono {
         }
 
         const response = await noteService.fetchNotesByBook(parsed.data);
-        return c.json(response, response.code as any);
+        return c.json(response, response.code);
         }   
         catch (error) {
             if (error instanceof BaseError) {
             return c.json(
                 { code: error.code, message: error.message, content: null },
-                error.code as any,
+                error.code,
             );
         }
         throw error;
@@ -77,7 +77,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
     note.get("/:id", async (c) => {
         try {
         const id = c.req.param("id");
-        const parsed = await FetchNoteRequestZObj.safeParseAsync({ id });
+        const parsed = await fetchNoteRequestZObj.safeParseAsync({ id });
 
         if (!parsed.success) {
             return c.json(
@@ -91,13 +91,13 @@ export function createNoteRouter(noteService: NoteService): Hono {
         }
 
         const response = await noteService.fetchNote(parsed.data);
-        return c.json(response, response.code as any);
+        return c.json(response, response.code);
         } 
         catch (error) {
             if (error instanceof BaseError) {
             return c.json(
             { code: error.code, message: error.message, content: null },
-            rror.code as any,
+            error.code,
             );
         }
         throw error;
@@ -109,7 +109,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
         try {
         const id = c.req.param("id");
         const body = await c.req.json();
-        const parsed = await UpdateNoteRequestZObj.safeParseAsync({ ...body, id });
+        const parsed = await updateNoteRequestZObj.safeParseAsync({ ...body, id });
 
         if (!parsed.success) {
             return c.json(
@@ -123,13 +123,13 @@ export function createNoteRouter(noteService: NoteService): Hono {
         }
 
         const response = await noteService.updateNote(parsed.data);
-        return c.json(response, response.code as any);
+        return c.json(response, response.code);
         } 
         catch (error) {
             if (error instanceof BaseError) {
             return c.json(
             { code: error.code, message: error.message, content: null },
-            error.code as any,
+            error.code,
             );
         }
         throw error;
@@ -140,7 +140,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
     note.delete("/:id", async (c) => {
         try {
             const id = c.req.param("id");
-            const parsed = await DeleteNoteRequestZObj.safeParseAsync({ id });
+            const parsed = await deleteNoteRequestZObj.safeParseAsync({ id });
 
         if (!parsed.success) {
             return c.json(
@@ -154,13 +154,13 @@ export function createNoteRouter(noteService: NoteService): Hono {
         }
 
         const response = await noteService.deleteNote(parsed.data);
-        return c.json(response, response.code as any);
+        return c.json(response, response.code);
         } 
         catch (error) {
             if (error instanceof BaseError) {
                 return c.json(
                 { code: error.code, message: error.message, content: null },
-                error.code as any,
+                error.code,
                 );
             }
             throw error;
@@ -168,4 +168,5 @@ export function createNoteRouter(noteService: NoteService): Hono {
     });
 
     return note;
-}
+} 
+

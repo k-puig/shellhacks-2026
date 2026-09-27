@@ -1,11 +1,13 @@
 import type { EntityManager } from "@mikro-orm/postgresql";
+import { HighlightSchema } from "@package/database/schema/postgresql-schema/index.ts";
+import { NoteSchema } from "@package/database/schema/postgresql-schema/index.ts";
 import { createBaseResponse } from "@app/rest/lib/base-class/base-response.ts";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import type {
     CreateNoteRequest,
     DeleteNoteRequest,
     FetchNoteRequest,
-    FetchNotesByBookRequest,
+    ChangeNoteByBookRequest,
     UpdateNoteRequest,
 } from "@app/rest/note/dtos/note-request-dto.ts";
 import type {
@@ -14,8 +16,27 @@ import type {
     FetchNoteBaseResponse,
     FetchNotesByBookBaseResponse,
     UpdateNoteBaseResponse,
-} from "@app/rest/note/dtos/note-response-dto.ts";
+} from "@app/rest/note/dtos/note-response.dto.ts";
 import { NoteRepository } from "@app/rest/note/note-repository.ts";
+
+type NoteHighlight = NoteSchema["highlight"] | string | HighlightSchema;
+
+function getHighlightId(highlight: NoteHighlight): string {
+    if (typeof highlight === "string") {
+        return highlight;
+    }
+
+    if (
+        typeof highlight === "object" &&
+        highlight !== null &&
+        "id" in highlight &&
+        typeof highlight.id === "string"
+    ) {
+        return highlight.id;
+    }
+
+    throw new Error("Note highlight does not contain a valid ID");
+}
 
 export class NoteService {
     private readonly noteRepository: NoteRepository;
@@ -27,10 +48,7 @@ export class NoteService {
     async createNote(req: CreateNoteRequest): Promise<CreateNoteBaseResponse> {
         const note = await this.noteRepository.createNote(req);
 
-        const highlightId =
-        typeof note.highlight === "string"
-        ? note.highlight
-        : (note.highlight as any)?.id ?? (note.highlight as any);
+        const highlightId = getHighlightId(note.highlight);
 
         return await createBaseResponse(201, "Note created successfully", {
             id: note.id,
@@ -48,10 +66,7 @@ export class NoteService {
             throw new BaseError(404, "Note not found");
         }
 
-        const highlightId =
-        typeof note.highlight === "string"
-        ? note.highlight
-        : (note.highlight as any)?.id ?? (note.highlight as any);
+        const highlightId = getHighlightId(note.highlight);
 
         return await createBaseResponse(200, "Note fetched", {
             id: note.id,
@@ -63,16 +78,12 @@ export class NoteService {
     }
 
     async fetchNotesByBook(
-        req: FetchNotesByBookRequest,
-    ):    
-    Promise<FetchNotesByBookBaseResponse> {
+        req: ChangeNoteByBookRequest,
+    ): Promise<FetchNotesByBookBaseResponse> {
         const notes = await this.noteRepository.findByBookId(req.bookId);
 
         const content = notes.map((n) => {
-            const highlightId =
-            typeof n.highlight === "string"
-            ? n.highlight
-            : (n.highlight as any)?.id ?? (n.highlight as any);
+            const highlightId = getHighlightId(n.highlight);
 
             return {
                 id: n.id,
@@ -94,10 +105,7 @@ export class NoteService {
             throw new BaseError(404, "Note not found");
         }
 
-        const highlightId =
-        typeof updated.highlight === "string"
-        ? updated.highlight
-        : (updated.highlight as any)?.id ?? (updated.highlight as any);
+        const highlightId = getHighlightId(updated.highlight);
 
         return await createBaseResponse(200, "Note updated successfully", {
             id: updated.id,
