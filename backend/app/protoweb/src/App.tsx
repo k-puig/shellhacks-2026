@@ -11,8 +11,12 @@ function App() {
   const { isPending, data } = useQuery({
     queryKey: ["userinfotest"],
     queryFn: getCurrentUserInfo,
-    retry: (failureCount, error) =>
-      !(error instanceof Response && error.status === 401) && failureCount < 3,
+    retry: (failureCount, error) => {
+      const isUnauthorized = typeof error === "object" && error !== null &&
+        "status" in error && error.status === 401;
+
+      return !isUnauthorized && failureCount < 3;
+    },
   });
 
   return (
