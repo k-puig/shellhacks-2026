@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as AuthSession from 'expo-auth-session';
+import { fetchProfile, type UserProfile } from './profile';
 import { saveTokens, getAccessToken, clearTokens } from './tokenStorage';
 
 //const funcs to access auth
@@ -16,6 +17,8 @@ const discovery: AuthSession.DiscoveryDocument = {
 export function useAuth() {
     const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
+    // Name, email and picture for Settings, loaded once there's a token.
+    const [user, setUser] = useState<UserProfile | null>(null);
 
     const redirectUri = AuthSession.makeRedirectUri({
         scheme: 'dodomobile',
@@ -72,6 +75,20 @@ export function useAuth() {
         }
     }, [loginResponse, signUpResponse]);
 
+    // load the user's profile whenever there's a token
+    useEffect(() => {
+        if (!token || !domain) return;
+        let current = true;
+        fetchProfile(domain, token)
+            .then((profile) => {
+                if (current) setUser(profile);
+            })
+            .catch((error) => console.log('[dodo] Could not load profile:', String(error)));
+        return () => {
+            current = false;
+        };
+    }, [token]);
+
     const login = useCallback(async () => {
         if (!loginRequest) return;
         await promptLoginAsync();
@@ -83,12 +100,14 @@ export function useAuth() {
     const logout = useCallback(async () => {
         await clearTokens();
         setToken(null);
+        setUser(null);
     }, []);
 
     return {
         token,
         isAuthenticated: !!token,
         isLoading,
+        user,
         login,
         signUp,
         logout,

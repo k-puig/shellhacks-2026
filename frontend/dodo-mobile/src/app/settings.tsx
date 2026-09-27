@@ -1,7 +1,10 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AUTH_ENABLED } from '@/auth/config';
+import { initials } from '@/auth/profile';
 import { useAuth } from '@/auth/useAuth';
 import { colors } from '@/theme';
 
@@ -25,17 +28,10 @@ const groups: { title: string; rows: [string, string][] }[] = [
       ['“next chapter”', 'Jump chapters'],
     ],
   },
-  {
-    title: 'Account',
-    rows: [
-      ['Signed in as', 'Guest'],
-      ['Sync', 'Off'],
-    ],
-  },
 ];
 
 export default function SettingsScreen() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const handleLogout = async () => {
     await logout();
@@ -52,6 +48,40 @@ export default function SettingsScreen() {
             <Text style={styles.done}>Done</Text>
           </Pressable>
         </View>
+        <View style={styles.group}>
+          <Text style={styles.groupTitle}>Account</Text>
+          <View style={[styles.card, styles.account]}>
+            {user?.picture ? (
+              <Image source={user.picture} style={styles.avatar} accessibilityLabel="Profile picture" />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                {user ? (
+                  <Text style={styles.avatarInitials}>{initials(user.name)}</Text>
+                ) : (
+                  <SymbolView
+                    name={{ ios: 'person.fill', android: 'person', web: 'person' }}
+                    tintColor={colors.textSecondary}
+                    size={26}
+                  />
+                )}
+              </View>
+            )}
+            <View style={styles.accountText}>
+              <Text style={styles.accountName} numberOfLines={1}>
+                {user?.name ?? (AUTH_ENABLED ? 'Signed in' : 'Guest')}
+              </Text>
+              <Text style={styles.accountEmail} numberOfLines={1}>
+                {user?.email ?? (AUTH_ENABLED ? '' : 'Sign-in is turned off for now')}
+              </Text>
+            </View>
+          </View>
+          {AUTH_ENABLED && (
+            <Pressable style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
+              <Text style={styles.logoutText}>Log Out</Text>
+            </Pressable>
+          )}
+        </View>
+
         {groups.map((group) => (
           <View key={group.title} style={styles.group}>
             <Text style={styles.groupTitle}>{group.title}</Text>
@@ -65,11 +95,6 @@ export default function SettingsScreen() {
             </View>
           </View>
         ))}
-        {AUTH_ENABLED && (
-          <Pressable style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
-            <Text style={styles.logoutText}>Log Out</Text>
-          </Pressable>
-        )}
       </ScrollView>
     </View>
   );
@@ -100,6 +125,17 @@ const styles = StyleSheet.create({
   rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   label: { color: colors.text, fontSize: 15, flexShrink: 1 },
   value: { color: colors.textSecondary, fontSize: 15, flexShrink: 1, textAlign: 'right' },
+  account: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  avatar: { width: 52, height: 52, borderRadius: 26 },
+  avatarFallback: {
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: { color: colors.text, fontSize: 18, fontWeight: '600' },
+  accountText: { flex: 1, gap: 2 },
+  accountName: { color: colors.text, fontSize: 17, fontWeight: '600' },
+  accountEmail: { color: colors.textSecondary, fontSize: 14 },
   logoutButton: {
     backgroundColor: '#2A1F24',
     borderWidth: 1,
@@ -107,7 +143,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
   },
   logoutText: { color: '#FF6B6B', fontSize: 16, fontWeight: '600' },
 });
