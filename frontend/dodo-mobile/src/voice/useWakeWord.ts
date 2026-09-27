@@ -131,12 +131,13 @@ export function useWakeWord({
         categoryOptions: ['defaultToSpeaker', 'allowBluetoothA2DP', 'mixWithOthers'],
         mode: 'default',
       },
-      // Keep voice processing (echo cancellation) OFF: on iOS it switches the
-      // audio session into "voiceChat" (phone-call) mode, which routes the
-      // narrator to the earpiece and ducks its volume, flipping back and forth
-      // on every recognition restart. Without it the mic may pick up the
-      // narration, which is harmless: the book never says "Hey Nova".
-      iosVoiceProcessingEnabled: false,
+      // EXPERIMENT: voice processing (echo cancellation) ON, so the mic stops
+      // transcribing the narrator and "Hey Nova" isn't buried in book text.
+      // It was OFF because on iOS it switches the audio session into
+      // "voiceChat" (phone-call) mode, which can route the narrator to the
+      // earpiece and duck its volume, flipping back and forth on every
+      // recognition restart. Revert to false if that happens.
+      iosVoiceProcessingEnabled: true,
     });
   };
 
