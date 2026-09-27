@@ -22,7 +22,7 @@ export const deleteUserRequestZObject = z.object({
 export const changeUserProfilePictureRequestZObject = z.object({
   id: z.uuidv4(),
   key: z.string(),
-  newProfilePicture: z.instanceof(File),
+  newProfilePicture: z.instanceof(File).optional(),
 });
 
 export type CreateUserRequest = z.infer<typeof createUserRequestZObj>;

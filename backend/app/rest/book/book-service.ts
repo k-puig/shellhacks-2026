@@ -17,6 +17,13 @@ import { BookRepository } from "@app/rest/book/book-repository.ts";
 import { BookSchema } from "@package/database/schema/postgresql-schema/index.ts";
 import { S3Client } from "@package/s3/client.ts";
 
+export type FetchBookObjectResult = {
+  body: ReadableStream<Uint8Array>;
+  contentLength?: number;
+  contentType: string;
+  filename: string;
+};
+
 function toBookContent(book: BookSchema) {
   return {
     id: book.id,
@@ -65,6 +72,25 @@ export class BookService {
     }
 
     return await createBaseResponse(200, "Book fetched", toBookContent(book));
+  }
+
+  async fetchBookObject(
+    req: FetchBookRequest,
+  ): Promise<FetchBookObjectResult> {
+    const book = await this.bookRepository.findById(req.id);
+
+    if (!book) {
+      throw new BaseError(404, "Book not found");
+    }
+
+    const s3Object = await this.s3Client.fetchBook({ key: book.s3Key });
+
+    return {
+      body: s3Object.body,
+      contentLength: s3Object.contentLength,
+      contentType: s3Object.contentType ?? "application/epub+zip",
+      filename: `${book.title}.epub`,
+    };
   }
 
   async updateBook(req: UpdateBookRequest): Promise<UpdateBookBaseResponse> {

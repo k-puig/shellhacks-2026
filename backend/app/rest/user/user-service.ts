@@ -18,6 +18,12 @@ import type {
 import { UserRepository } from "@app/rest/user/user-repository.ts";
 import { S3Client } from "@package/s3/client.ts";
 
+export type FetchProfilePictureResult = {
+  body: ReadableStream<Uint8Array>;
+  contentLength?: number;
+  contentType: string;
+};
+
 export class UserService {
   private readonly userRepository: UserRepository;
   private readonly s3Client: S3Client;
@@ -66,6 +72,30 @@ export class UserService {
     });
   }
 
+  async fetchProfilePicture(
+    req: FetchUserRequest,
+  ): Promise<FetchProfilePictureResult> {
+    const user = await this.userRepository.findById(req.id);
+
+    if (!user) {
+      throw new BaseError(404, "User not found");
+    }
+
+    if (!user.s3Key) {
+      throw new BaseError(404, "Profile picture not found");
+    }
+
+    const s3Object = await this.s3Client.fetchProfilePicture({
+      key: user.s3Key,
+    });
+
+    return {
+      body: s3Object.body,
+      contentLength: s3Object.contentLength,
+      contentType: s3Object.contentType ?? "application/octet-stream",
+    };
+  }
+
   async deleteUser(req: DeleteUserRequest): Promise<DeleteUserBaseResponse> {
     const wasUserDeleted = await this.userRepository.deleteById(req.id);
 
@@ -97,13 +127,13 @@ export class UserService {
       throw new BaseError(404, "User not found");
     }
 
-    if(req.key === ""){
+    if (req.newProfilePicture === undefined) {
       user.s3Key = undefined;
       await this.userRepository.flush();
 
       return await createBaseResponse(200, "Profile Picture Removed", {
         id: user.id,
-        key: ""
+        key: "",
       });
     }
 

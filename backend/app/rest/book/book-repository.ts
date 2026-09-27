@@ -19,11 +19,11 @@ export class BookRepository extends BaseRepository<BookSchema> {
   }
 
   getLibraryReference(id: string): Ref<LibrarySchema> {
-    return this.em.getReference(LibrarySchema, id);
+    return this.em.getReference(LibrarySchema, id, { wrapped: true });
   }
 
   getUserReference(id: string): Ref<UserSchema> {
-    return this.em.getReference(UserSchema, id);
+    return this.em.getReference(UserSchema, id, { wrapped: true });
   }
 
   async createBook(req: CreateBookRecordRequest): Promise<BookSchema> {
