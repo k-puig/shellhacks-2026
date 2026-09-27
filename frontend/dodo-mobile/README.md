@@ -39,6 +39,11 @@ npx expo start --dev-client --lan -c
 
 Open DODO on the phone and choose your Mac's server from the dev launcher, or open the URL shown by Metro. Add `-c` whenever `.env.local` changes, because env values are bundled at start.
 
+## Your data
+
+- Highlights, notes, asked questions and reading position are saved **on the phone** (`saved-items.json` and `reading-progress.json` in the app's storage), so they survive closing the app. They belong to the phone, not the account, until backend sync lands. Settings → Your data clears them.
+- `src/api/` holds the backend client. It sends the login token with each request and signs out if the backend rejects it. No screen uses it yet. Set `EXPO_PUBLIC_API_URL` when one does.
+
 ## Voice commands
 
 Say **"Hey DODO"**, pause for a moment, then give the command. For example: `pause`, `play`, `go back`, `skip`, `next chapter`, `faster`, `slower`, `highlight that`, `highlight that in blue`, `note …`, or a question like `who is …?`. The full list is in Settings.

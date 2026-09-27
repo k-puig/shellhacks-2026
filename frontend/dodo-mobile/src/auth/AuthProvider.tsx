@@ -16,6 +16,7 @@ const guestAuth: AuthState = {
   login: async () => {},
   signUp: async () => {},
   logout: async () => {},
+  endSession: async () => {},
   getValidAccessToken: async () => null,
 };
 

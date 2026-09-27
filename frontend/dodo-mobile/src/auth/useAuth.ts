@@ -137,6 +137,14 @@ export function useAuthFlow() {
         };
     }, []);
 
+    // Forgets the login on this phone without opening a browser: used when the
+    // login can't be renewed or the backend rejects it (a 401).
+    const endSession = useCallback(async () => {
+        await clearTokens();
+        setTokens(null);
+        setUser(null);
+    }, []);
+
     const getValidAccessToken = useCallback(async () => {
         if (!tokens) return null;
         if (isFresh(tokens)) return tokens.accessToken;
@@ -148,12 +156,10 @@ export function useAuthFlow() {
             return refreshed.accessToken;
         } catch (error) {
             console.warn('[dodo] Auth0 token refresh failed:', String(error));
-            await clearTokens();
-            setTokens(null);
-            setUser(null);
+            await endSession();
             return null;
         }
-    }, [tokens]);
+    }, [endSession, tokens]);
 
     useEffect(() => {
         if (!tokens || !AUTH0_DOMAIN) return;
@@ -200,9 +206,7 @@ export function useAuthFlow() {
     const signUp = useCallback(() => signIn('sign-up', { screen_hint: 'signup' }), [signIn]);
 
     const logout = useCallback(async () => {
-        await clearTokens();
-        setTokens(null);
-        setUser(null);
+        await endSession();
         if (!AUTH0_DOMAIN || !AUTH0_CLIENT_ID) return;
 
         const logoutUrl =
@@ -214,7 +218,7 @@ export function useAuthFlow() {
         } catch (error) {
             console.warn('[dodo] Auth0 browser logout failed:', String(error));
         }
-    }, [redirectUri]);
+    }, [endSession, redirectUri]);
 
     return {
         token: tokens?.accessToken ?? null,
@@ -225,6 +229,7 @@ export function useAuthFlow() {
         login,
         signUp,
         logout,
+        endSession,
         getValidAccessToken,
     };
 }

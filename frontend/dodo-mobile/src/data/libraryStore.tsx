@@ -3,8 +3,8 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 import { mockBooks, type AskedQuestion, type Highlight, type Note } from './mockBooks';
 import { loadPositions, savePositions } from './progressFile';
 import { withoutBook, withPosition, type Positions } from './readingProgress';
-
-type Saved<T> = T & { bookId: string };
+import { loadSavedItems, saveSavedItems } from './savedFile';
+import type { Saved } from './savedItems';
 
 type LibraryState = {
   currentBookId: string;
@@ -36,12 +36,13 @@ const LibraryContext = createContext<LibraryState | null>(null);
 let nextId = 0;
 const newId = (prefix: string) => `${prefix}${Date.now()}-${nextId++}`;
 
-// In-memory for the MVP; swap for TanStack Query + the backend later.
+// Saved on the phone for now; swap for TanStack Query + the backend later.
 export function LibraryProvider({ children }: PropsWithChildren) {
   const [currentBookId, openBook] = useState(mockBooks[0].id);
   const [highlights, setHighlights] = useState<Saved<Highlight>[]>([]);
   const [notes, setNotes] = useState<Saved<Note>[]>([]);
   const [askedQuestions, setAskedQuestions] = useState<Saved<AskedQuestion>[]>([]);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const [positions, setPositions] = useState<Positions>({});
   const [positionsLoaded, setPositionsLoaded] = useState(false);
 
@@ -54,6 +55,19 @@ export function LibraryProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (positionsLoaded) savePositions(positions);
   }, [positions, positionsLoaded]);
+
+  // Saved items go first; anything added while the file was loading stays.
+  useEffect(() => {
+    loadSavedItems().then((saved) => {
+      setHighlights((added) => [...saved.highlights, ...added]);
+      setNotes((added) => [...saved.notes, ...added]);
+      setAskedQuestions((added) => [...saved.askedQuestions, ...added]);
+      setSavedLoaded(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (savedLoaded) saveSavedItems({ highlights, notes, askedQuestions });
+  }, [highlights, notes, askedQuestions, savedLoaded]);
 
   return (
     <LibraryContext.Provider
