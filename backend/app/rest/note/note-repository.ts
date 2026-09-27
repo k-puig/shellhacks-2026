@@ -5,7 +5,7 @@ import type { CreateNoteRequest } from "@app/rest/note/dtos/note-request-dto.ts"
 
 export class NoteRepository extends BaseRepository<NoteSchema> {
     constructor(em: EntityManager) {
-        super(em, NoteSchema);
+        super(em, NoteSchema, (id: string) => ({ id }));
     }
     async createNote(newNote: CreateNoteRequest): Promise<NoteSchema> {
         const note = this.em.create(NoteSchema, {
