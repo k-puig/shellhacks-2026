@@ -1,7 +1,6 @@
 import * as z from "@zod/zod";
 
 export const createHighlightRequestZObj = z.object({
-  id: z.uuidv4().optional(),
   bookId: z.uuidv4(),
   start: z.number().int().nonnegative(),
   end: z.number().int().nonnegative(),

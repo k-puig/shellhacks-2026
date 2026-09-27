@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -23,12 +23,18 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
+import { updateBookProgress } from '@/api/books';
+import { isApiConfigured } from '@/api/client';
+import { createProgressSync } from '@/api/progressSync';
+import { useApi } from '@/api/useApi';
+import { useAuth } from '@/auth/AuthProvider';
 import { ActionButton, type ActionState } from '@/components/ActionButton';
 import { ContentsSheet } from '@/components/ContentsSheet';
 import { useLibrary } from '@/data/libraryStore';
+import { loadRemoteBookIds } from '@/data/remoteBookIds';
 import { useSettings } from '@/data/settingsStore';
 import { chapterIndexAt, nextChapterStart, previousChapterTarget } from '@/data/readingProgress';
-import { getBook, type Book, type Highlight, type Note, type Paragraph } from '@/data/mockBooks';
+import type { Book, Highlight, Note, Paragraph } from '@/data/mockBooks';
 import { useNarration } from '@/narration/useNarration';
 import { colors, HIGHLIGHT_COLORS, withAlpha, type HighlightColorName } from '@/theme';
 import {
@@ -179,7 +185,7 @@ function sentenceAround(paragraph: Paragraph, idx: number) {
 }
 
 export default function ReaderScreen() {
-  const { currentBookId } = useLibrary();
+  const { currentBookId, getBook } = useLibrary();
   // Remount per book so narration and voice state start fresh.
   return <Reader key={currentBookId} book={getBook(currentBookId)} />;
 }
@@ -187,6 +193,9 @@ export default function ReaderScreen() {
 function Reader({ book }: { book: Book }) {
   const narration = useNarration(book);
   const library = useLibrary();
+  const api = useApi();
+  const { isAuthenticated, user } = useAuth();
+  const subject = user?.sub;
   const { settings, loaded: settingsLoaded } = useSettings();
   const insets = useSafeAreaInsets();
   const highlights = useMemo(
@@ -549,6 +558,8 @@ function Reader({ book }: { book: Book }) {
     },
     // Not until saved settings load, so a saved "off" never briefly turns the mic on.
     alwaysListen: settingsLoaded && settings.wakeWord,
+    // "Hey DODO" keeps working with the screen locked while the book is read aloud.
+    keepInBackground: narration.isPlaying,
     ignore: (text) =>
       isNarratorEcho(text, nearbyNarration()) || isNarratorEcho(text, answerEcho.current),
   });
@@ -727,6 +738,35 @@ function Reader({ book }: { book: Book }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [library.positionsLoaded]);
 
+  const progressSync = useRef<ReturnType<typeof createProgressSync> | null>(null);
+  const pendingSyncPosition = useRef<number | null>(null);
+  const activeAccount = useRef({ isAuthenticated, subject });
+  useLayoutEffect(() => {
+    activeAccount.current = { isAuthenticated, subject };
+  }, [isAuthenticated, subject]);
+  useEffect(() => {
+    let active = true;
+    if (isAuthenticated && subject && isApiConfigured()) {
+      void loadRemoteBookIds(subject).then((ids) => {
+        const remoteId = ids[book.id];
+        if (!active || !remoteId) return;
+        const sync = createProgressSync((position) => updateBookProgress(api, remoteId, position));
+        progressSync.current = sync;
+        if (pendingSyncPosition.current !== null) sync.queue(pendingSyncPosition.current);
+      });
+    }
+    return () => {
+      active = false;
+      if (activeAccount.current.isAuthenticated && activeAccount.current.subject === subject) {
+        progressSync.current?.flush();
+      } else {
+        progressSync.current?.cancel();
+      }
+      progressSync.current = null;
+      pendingSyncPosition.current = null;
+    };
+  }, [api, book.id, isAuthenticated, subject]);
+
   // Save the spot as each paragraph starts and whenever narration pauses.
   // Skipped once after a reset, so moving back to the start isn't saved as progress.
   const skipNextSave = useRef(false);
@@ -735,7 +775,12 @@ function Reader({ book }: { book: Book }) {
       skipNextSave.current = false;
       return;
     }
-    if (restored.current) library.setPosition(book.id, narration.currentIdxRef.current);
+    if (restored.current) {
+      const position = narration.currentIdxRef.current;
+      library.setPosition(book.id, position);
+      pendingSyncPosition.current = position;
+      progressSync.current?.queue(position);
+    }
     // library.setPosition only updates state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeParagraph, narration.isPlaying]);

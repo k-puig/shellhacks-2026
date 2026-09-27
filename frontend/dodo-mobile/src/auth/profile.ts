@@ -1,6 +1,6 @@
 // The signed-in user's profile for Settings, from Auth0's /userinfo endpoint.
 
-export type UserProfile = { name: string; email?: string; picture?: string };
+export type UserProfile = { sub?: string; name: string; email?: string; picture?: string };
 
 export class UserInfoError extends Error {
   constructor(public readonly status: number) {
@@ -18,6 +18,7 @@ export function parseProfile(raw: Record<string, unknown>): UserProfile {
   const name = text(raw.name);
   const realName = name && name !== email ? name : undefined;
   return {
+    sub: text(raw.sub),
     name: realName ?? text(raw.nickname) ?? email ?? 'Reader',
     email,
     picture: text(raw.picture),

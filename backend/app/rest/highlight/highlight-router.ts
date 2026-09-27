@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
+import * as z from "@zod/zod";
+import { handleRouteError } from "@app/rest/lib/base-class/error-handler.ts";
 import {
   createHighlightRequestZObj,
   deleteHighlightRequestZObj,
@@ -9,62 +10,75 @@ import { HighlightService } from "@app/rest/highlight/highlight-service.ts";
 
 export function createHighlightRouter(
   highlightService: HighlightService,
-): Hono {
-  const highlight = new Hono();
+): Hono<{ Variables: { authenticatedUserId: string } }> {
+  const highlight = new Hono<{ Variables: { authenticatedUserId: string } }>();
+  highlight.onError(handleRouteError);
+
+  const invalid = (message: string, issues: unknown) => ({
+    code: 400 as const,
+    message,
+    content: issues,
+  });
 
   highlight.post("/", async (c) => {
     const parsed = await createHighlightRequestZObj.safeParseAsync(
       await c.req.json(),
     );
-
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid highlight request", content: parsed.error.issues });
+      return c.json(
+        invalid("Invalid highlight request", parsed.error.issues),
+        400,
+      );
     }
+    return c.json(
+      await highlightService.createHighlight(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      ),
+    );
+  });
 
-    const response = await highlightService.createHighlight(parsed.data);
-    return c.json(response);
+  highlight.get("/book/:bookId", async (c) => {
+    const parsed = await z.uuidv4().safeParseAsync(c.req.param("bookId"));
+    if (!parsed.success) {
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
+    }
+    return c.json(
+      await highlightService.listHighlights(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      ),
+    );
   });
 
   highlight.get("/:id", async (c) => {
     const parsed = await fetchHighlightRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid highlight id", content: parsed.error.issues });
+      return c.json(invalid("Invalid highlight id", parsed.error.issues), 400);
     }
-
-    try {
-      const response = await highlightService.fetchHighlight(parsed.data);
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
-      }
-
-      throw error;
-    }
+    return c.json(
+      await highlightService.fetchHighlight(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      ),
+    );
   });
 
   highlight.delete("/:id", async (c) => {
     const parsed = await deleteHighlightRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid highlight id", content: parsed.error.issues });
+      return c.json(invalid("Invalid highlight id", parsed.error.issues), 400);
     }
-
-    try {
-      const response = await highlightService.deleteHighlight(parsed.data);
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
-      }
-
-      throw error;
-    }
+    return c.json(
+      await highlightService.deleteHighlight(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      ),
+    );
   });
 
   return highlight;

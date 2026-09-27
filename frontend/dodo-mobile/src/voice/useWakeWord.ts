@@ -29,6 +29,9 @@ const MAX_FAILURES = 5;
 // Each restart is ~1 s of deafness, so on-device, which has no limit, waits longer.
 const SESSION_REFRESH_MS = 45_000;
 const ON_DEVICE_REFRESH_MS = 5 * 60_000;
+// In the background, keep listening this long after narration pauses, so
+// "Hey DODO, pause" … "Hey DODO, play" works with the screen locked.
+const BACKGROUND_GRACE_MS = 2 * 60_000;
 
 type Options = {
   onWake: () => void;
@@ -38,11 +41,21 @@ type Options = {
   ignore?: (text: string) => boolean;
   // Keep listening for "Hey DODO" (default). When false, only the mic button listens.
   alwaysListen?: boolean;
+  // Keep listening with the app in the background (screen locked, another app
+  // open). The reader sets this while the book is being narrated.
+  keepInBackground?: boolean;
 };
 
 // Always-on listener: keeps continuous recognition running, watches the
 // transcript for "Hey DODO", then hands whatever follows it to onCommand.
-export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen = true }: Options) {
+export function useWakeWord({
+  onWake,
+  onCommand,
+  onCancel,
+  ignore,
+  alwaysListen = true,
+  keepInBackground = false,
+}: Options) {
   const [status, setStatus] = useState<VoiceStatus>('starting');
   const [heard, setHeard] = useState('');
   // Same as `heard`, readable from callbacks (the mic button ends the turn with it).
@@ -56,6 +69,7 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
 
   const handlers = useRef({ onWake, onCommand, onCancel, ignore });
   const alwaysListenRef = useRef(alwaysListen);
+  const keepInBackgroundRef = useRef(keepInBackground);
   // Whether a recognition session is running right now.
   const running = useRef(false);
   useEffect(() => {
@@ -77,9 +91,15 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
   // native start() rebuilds the audio engine and re-activates the session,
   // which cuts out the narrator. So only ever keep one restart pending.
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // iOS won't let us record in the background, so we stop while backgrounded
-  // (screen locked, app switched) and start fresh when the app is active again.
+  // In the background (screen locked, app switched) we keep listening only while
+  // the book is being narrated, and for BACKGROUND_GRACE_MS after it pauses so
+  // "Hey DODO, play" still works; otherwise we stop and start fresh when the app
+  // is active again. iOS allows this because the "audio" background mode is on
+  // and the mic's audio session is already running when the app leaves.
   const foreground = useRef(AppState.currentState === 'active');
+  const inBackgroundAllowed = useRef(false);
+  const graceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canListen = () => foreground.current || inBackgroundAllowed.current;
   // On-device recognition: no network and no server time limit. The simulator
   // has no on-device model, and some phones haven't downloaded it, so this
   // flips to server recognition if the local recognizer fails to start.
@@ -88,8 +108,8 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
   );
 
   const start = () => {
-    vlog('start()', { enabled: enabled.current, foreground: foreground.current });
-    if (!enabled.current || !foreground.current) return;
+    vlog('start()', { enabled: enabled.current, foreground: foreground.current, background: inBackgroundAllowed.current });
+    if (!enabled.current || !canListen()) return;
     ExpoSpeechRecognitionModule.start({
       lang: 'en-US',
       interimResults: true,
@@ -172,7 +192,7 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
     const delay = failures.current ? 250 * 2 ** failures.current : 100;
     // With "Hey DODO" off, only keep going while a tapped command is pending.
     const keepListening = alwaysListenRef.current || awake.current;
-    if (enabled.current && foreground.current && keepListening) scheduleStart(delay);
+    if (enabled.current && canListen() && keepListening) scheduleStart(delay);
   });
 
   useSpeechRecognitionEvent('error', (event) => {
@@ -180,7 +200,14 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
     if (event.error !== 'aborted') console.log('[dodo] speech error', event.error, event.message);
     // Errors from the OS cutting the mic (screen lock, call, Siri) aren't real
     // failures; the foreground handler restarts listening.
-    if (!foreground.current || event.error === 'interrupted') return;
+    if (!canListen() || event.error === 'interrupted') return;
+    // iOS won't start a new recording from the background, only keep one that
+    // was running. Stop trying quietly; returning to the app starts it again.
+    if (!foreground.current && event.error === 'audio-capture') {
+      vlog('background restart refused by iOS');
+      inBackgroundAllowed.current = false;
+      return;
+    }
     if (event.error === 'not-allowed') {
       enabled.current = false;
       setStatus('denied');
@@ -284,12 +311,23 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
   useEffect(() => {
     // State already starts at 'starting' on mount, so only kick off listening.
     begin();
+    // Locking the phone goes active → inactive → background. "inactive" alone
+    // (Control Center, a notification, the lock animation) isn't leaving the
+    // app, so only "background" and "active" change anything.
     const sub = AppState.addEventListener('change', (state) => {
-      const isActive = state === 'active';
-      if (isActive === foreground.current) return;
-      foreground.current = isActive;
-      if (isActive) startFresh();
-      else if (state === 'background') stopForBackground();
+      if (state === 'active') {
+        if (foreground.current) return;
+        foreground.current = true;
+        if (graceTimer.current) clearTimeout(graceTimer.current);
+        // Keep a session that survived the background; otherwise start again.
+        if (!inBackgroundAllowed.current || !running.current) startFresh();
+        inBackgroundAllowed.current = false;
+      } else if (state === 'background' && foreground.current) {
+        foreground.current = false;
+        inBackgroundAllowed.current = keepInBackgroundRef.current;
+        vlog('background', { keepListening: inBackgroundAllowed.current });
+        if (!inBackgroundAllowed.current) stopForBackground();
+      }
     });
     return () => {
       sub.remove();
@@ -297,6 +335,7 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
       if (timer.current) clearTimeout(timer.current);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       if (restartTimer.current) clearTimeout(restartTimer.current);
+      if (graceTimer.current) clearTimeout(graceTimer.current);
       ExpoSpeechRecognitionModule.abort();
     };
     // Mount-only: begin/startFresh/stopForBackground only touch refs and setters.
@@ -326,6 +365,22 @@ export function useWakeWord({ onWake, onCommand, onCancel, ignore, alwaysListen 
     // startFresh only touches refs and setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alwaysListen]);
+
+  // Narration paused or resumed while the app is in the background: after the
+  // grace period with nothing playing, stop listening until the app is opened.
+  useEffect(() => {
+    keepInBackgroundRef.current = keepInBackground;
+    if (foreground.current || !inBackgroundAllowed.current) return;
+    if (graceTimer.current) clearTimeout(graceTimer.current);
+    graceTimer.current = null;
+    if (!keepInBackground) {
+      graceTimer.current = setTimeout(() => {
+        vlog('background grace over');
+        inBackgroundAllowed.current = false;
+        stopForBackground();
+      }, BACKGROUND_GRACE_MS);
+    }
+  }, [keepInBackground]);
 
   // Turn listening back on after it gave up (tap on "Voice unavailable").
   const retry = startFresh;

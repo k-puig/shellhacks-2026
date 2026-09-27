@@ -10,7 +10,7 @@
     "path": "./deno.lock"
   },
   "tasks": {
-    "rest": "deno run --allow-net --allow-env app/rest/main.ts",
+    "rest": "deno run --allow-sys --allow-net --allow-env app/rest/main.ts",
     "protoweb": "deno run --allow-net --allow-read jsr:@std/http@1/file-server app/protoweb/dist/ -p 5173",
     "splash": "deno run --allow-net --allow-read jsr:@std/http@1/file-server app/splash/dist/ -p 5173"
   },

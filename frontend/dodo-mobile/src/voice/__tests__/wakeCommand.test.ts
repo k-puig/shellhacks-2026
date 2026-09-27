@@ -16,6 +16,11 @@ describe('readResult', () => {
     });
   });
 
+  it('prefers an alternative that also has the command (heard on a real iPhone)', () => {
+    expect(readResult([' Hey DODO', ' Hey DODO pause'], true)).toEqual({ woke: true, command: 'pause' });
+    expect(readResult(['Hey DODO', 'Hey Dodo'], false)).toEqual({ woke: true, command: '' });
+  });
+
   it('ignores speech without the wake word while asleep', () => {
     expect(readResult([' Play'], false)).toBeNull();
   });

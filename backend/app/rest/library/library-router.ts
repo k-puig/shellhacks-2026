@@ -7,8 +7,12 @@ import {
 } from "@app/rest/library/dtos/library-request-dto.ts";
 import { LibraryService } from "@app/rest/library/library-service.ts";
 
-export function createLibraryRouter(libraryService: LibraryService): Hono {
-  const library = new Hono();
+type LibraryEnv = { Variables: { authenticatedUserId: string } };
+
+export function createLibraryRouter(
+  libraryService: LibraryService,
+): Hono<LibraryEnv> {
+  const library = new Hono<LibraryEnv>();
 
   library.post("/", async (c) => {
     const parsed = await createLibraryRequestZObj.safeParseAsync(
@@ -16,10 +20,17 @@ export function createLibraryRouter(libraryService: LibraryService): Hono {
     );
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid library request", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid library request",
+        content: parsed.error.issues,
+      });
     }
 
-    const response = await libraryService.createLibrary(parsed.data);
+    const response = await libraryService.createLibrary(
+      parsed.data,
+      c.get("authenticatedUserId"),
+    );
     return c.json(response);
   });
 
@@ -29,15 +40,26 @@ export function createLibraryRouter(libraryService: LibraryService): Hono {
     });
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid library id", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid library id",
+        content: parsed.error.issues,
+      });
     }
 
     try {
-      const response = await libraryService.fetchLibrary(parsed.data);
+      const response = await libraryService.fetchLibrary(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        });
       }
 
       throw error;
@@ -50,15 +72,26 @@ export function createLibraryRouter(libraryService: LibraryService): Hono {
     });
 
     if (!parsed.success) {
-      return c.json({ code: 400, message: "Invalid library id", content: parsed.error.issues });
+      return c.json({
+        code: 400,
+        message: "Invalid library id",
+        content: parsed.error.issues,
+      });
     }
 
     try {
-      const response = await libraryService.deleteLibrary(parsed.data);
+      const response = await libraryService.deleteLibrary(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
       return c.json(response);
     } catch (error) {
       if (error instanceof BaseError) {
-        return c.json({ code: error.code, message: error.message, content: null });
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        });
       }
 
       throw error;

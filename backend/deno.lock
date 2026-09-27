@@ -30,6 +30,7 @@
     "npm:create-vite-extra@latest": "5.0.3",
     "npm:create-vite@latest": "9.2.1",
     "npm:hono@^4.13.9": "4.13.9",
+    "npm:jose@6.2.12": "6.2.12",
     "npm:react-dom@^19.2.8": "19.3.0_react@19.3.0",
     "npm:react@^19.2.8": "19.3.0",
     "npm:reflect-metadata@~0.2.2": "0.2.2",
@@ -1589,6 +1590,7 @@
           "npm:@mikro-orm/decorators@^7.2.1",
           "npm:@mikro-orm/postgresql@^7.2.1",
           "npm:hono@^4.13.9",
+          "npm:jose@6.2.12",
           "npm:uuid@^14.0.2"
         ]
       },

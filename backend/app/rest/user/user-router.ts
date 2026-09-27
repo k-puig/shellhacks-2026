@@ -1,48 +1,24 @@
 import { Hono } from "hono";
-import {
-  deleteCookie,
-  getCookie,
-  getSignedCookie,
-  setSignedCookie,
-} from "hono/cookie";
-import { auth, callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
+import { deleteCookie, getCookie } from "hono/cookie";
+import { callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
   changeUserProfilePictureRequestZObject,
+  fetchUserRequestZObject,
   updateUserRequestZObject,
 } from "@app/rest/user/dtos/user-request-dto.ts";
-import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
+
 import { UserService } from "@app/rest/user/user-service.ts";
+
+type UserEnv = OIDCEnv & {
+  Variables: { authenticatedUserId?: string; authenticatedSub?: string };
+};
 
 export function createUserRouter(
   userService: UserService,
-): Hono<OIDCEnv> {
-  // Initialize router with auth middleware
-  const user = new Hono<OIDCEnv>();
-  user.use(
-    auth({
-      domain: Deno.env.get("AUTH0_DOMAIN"),
-      clientID: Deno.env.get("AUTH0_CLIENT_ID"),
-      clientSecret: Deno.env.get("AUTH0_CLIENT_SECRET"),
-      baseURL: Deno.env.get("BASE_URL"),
-      session: {
-        secret: Deno.env.get("SESSION_SECRET"),
-      },
-      routes: {
-        login: "/api/v1/user/login",
-        callback: "/api/v1/user/callback",
-        logout: "/api/v1/user/logout",
-      },
-      customRoutes: ["callback", "logout"],
-      authRequired: false,
-    }),
-  );
-
-  const cookieSecret = Deno.env.get("COOKIE_SECRET");
-  if (!cookieSecret) {
-    throw new Error("No cookie secret given");
-  }
+): Hono<UserEnv> {
+  const user = new Hono<UserEnv>();
 
   // Remove every cookie sent to this backend before ending the Auth0 session.
   // All backend-issued cookies use the root path, which must match to expire them.
@@ -54,22 +30,21 @@ export function createUserRouter(
     return logout()(c, next);
   });
 
-  // Current signed in user info
   user.get("/", async (c) => {
-    const cookie = await getSignedCookie(
-      c,
-      cookieSecret,
-      "userinfo",
-    );
+    const userId = c.get("authenticatedUserId");
+    if (!userId) return c.text("Unauthorized", 401);
     try {
-      const obj = JSON.parse(cookie || "");
-      const userInfo = await createUserBaseResponseZObj.safeParseAsync(obj);
-      if (!userInfo.success) {
-        return c.text("could not parse cookie info", 401);
+      const response = await userService.fetchUser({ id: userId });
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
       }
-      return c.json(userInfo.data);
-    } catch {
-      return c.text("bad cookie data", 401);
+      throw error;
     }
   });
 
@@ -95,46 +70,42 @@ export function createUserRouter(
       return c.newResponse("unable to parse user name and/or sub", 400);
     }
 
-    const userInfo = await userService.createUserOrDoNothing({
+    await userService.createUserOrDoNothing({
       id: crypto.randomUUID(),
       username: parsedUserData.data.name,
       authId: parsedUserData.data.sub,
     });
 
-    await setSignedCookie(
-      c,
-      "userinfo",
-      JSON.stringify(userInfo),
-      cookieSecret,
-      {
-        path: "/",
-        secure: false,
-        httpOnly: true,
-      },
-    );
-
     return c.redirect("/", 302);
   });
 
-  user.delete("/delete", async (c) => {
-    const session = await c.var.auth0Client?.getSession(c);
-    const userData = z.object({
-      sub: z.string(),
-    });
+  // A verified API bearer token may provision the matching account once.
+  user.post("/mobile-login", async (c) => {
+    const sub = c.get("authenticatedSub");
+    if (!sub) {
+      return c.json({
+        code: 401,
+        message: "Authentication required",
+        content: null,
+      }, 401);
+    }
 
-    const parsedUserData = await userData.safeParseAsync(session?.user);
-    if (!parsedUserData.success) {
-      console.error(
-        "Auth0 session user did not match expected schema:",
-        parsedUserData.error.issues,
-      );
-      return c.newResponse("unable to parse user auth id", 400);
+    const userInfo = await userService.createUserOrDoNothing({
+      id: crypto.randomUUID(),
+      username: "Reader",
+      authId: sub,
+    });
+    return c.json(userInfo, 200);
+  });
+
+  user.delete("/delete", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
     }
 
     try {
-      const response = await userService.deleteUserByAuthId(
-        parsedUserData.data.sub,
-      );
+      const response = await userService.deleteUser(userId);
 
       return c.json(response, response.code);
     } catch (error) {
@@ -151,6 +122,11 @@ export function createUserRouter(
   });
 
   user.patch("/profile-picture", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
     const parsedUserData = await changeUserProfilePictureRequestZObject
       .safeParseAsync(
         await c.req.parseBody(),
@@ -166,6 +142,7 @@ export function createUserRouter(
 
     try {
       const response = await userService.uploadOrDeleteProfilePicture(
+        userId,
         parsedUserData.data,
       );
 
@@ -183,7 +160,64 @@ export function createUserRouter(
     }
   });
 
+  user.get("/:id/profile-picture", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
+    const parsedUserData = await fetchUserRequestZObject.safeParseAsync({
+      id: c.req.param("id"),
+    });
+
+    if (!parsedUserData.success) {
+      return c.json({
+        code: 400,
+        message: "Invalid user id",
+        content: parsedUserData.error.issues,
+      }, 400);
+    }
+
+    if (parsedUserData.data.id !== userId) {
+      return c.json(
+        { code: 404, message: "User not found", content: null },
+        404,
+      );
+    }
+
+    try {
+      const profilePicture = await userService.fetchProfilePicture(
+        parsedUserData.data,
+        userId,
+      );
+      const headers: Record<string, string> = {
+        "Content-Type": profilePicture.contentType,
+      };
+
+      if (profilePicture.contentLength !== undefined) {
+        headers["Content-Length"] = String(profilePicture.contentLength);
+      }
+
+      return c.body(profilePicture.body, 200, headers);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
+      }
+
+      throw error;
+    }
+  });
+
   user.patch("/update", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
     const parsedUserData = await updateUserRequestZObject.safeParseAsync(
       await c.req.json(),
     );
@@ -197,7 +231,10 @@ export function createUserRouter(
     }
 
     try {
-      const response = await userService.updateUser(parsedUserData.data);
+      const response = await userService.updateUser(
+        userId,
+        parsedUserData.data,
+      );
 
       return c.json(response, response.code);
     } catch (error) {
