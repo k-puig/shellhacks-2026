@@ -1,3 +1,5 @@
+import { buildLibrary } from './library';
+
 // Mock data — delete once the epub-service returns real tokenized books.
 // Shape follows the brief: word `idx` is global across the whole book.
 
@@ -104,21 +106,21 @@ const sampleBooks: Book[] = [
   ]),
 ];
 
-// A full-length test book converted locally from an EPUB with
-// scripts/epub_to_book.py. It's git-ignored (copyrighted), so this require is
-// optional: without the file, the sample books above are used.
-function loadTestBook(): Book | null {
+// Full-length books converted locally from EPUBs with scripts/epub_to_book.py.
+// They're git-ignored (copyrighted test material), so this require is
+// optional: without them the library is just the sample books above.
+function loadConvertedBooks(): Book[] {
   try {
-    return require('./generated/testBook.json') as Book;
+    // Optional on purpose: a missing folder must not break the build.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require('./generated') as { generatedBooks: Book[] }).generatedBooks;
   } catch {
-    return null;
+    return [];
   }
 }
 
-const testBook = loadTestBook();
-
-// The library: the local test book when present, instead of the samples.
-export const mockBooks: Book[] = testBook ? [testBook] : sampleBooks;
+// Every converted book, then the samples.
+export const mockBooks: Book[] = buildLibrary(loadConvertedBooks(), sampleBooks);
 
 export function getBook(id: string | undefined): Book {
   return mockBooks.find((b) => b.id === id) ?? mockBooks[0];
