@@ -19,6 +19,14 @@ cp .env.example .env.local   # fill in keys; see comments in the file
 
 To sign with your own Apple account, set `DODO_IOS_BUNDLE_ID` and `DODO_APPLE_TEAM_ID` in `.env.local`. They override `app.json` through `app.config.js`, so don't edit `app.json` for this.
 
+## Login (Auth0)
+
+- Uses the **DODO Mobile** Native application in the `dodocall` tenant, not the website's app, which requires a client secret. In `.env.local`, set `EXPO_PUBLIC_AUTH0_DOMAIN` and that app's `EXPO_PUBLIC_AUTH0_CLIENT_ID`, and leave `EXPO_PUBLIC_AUTH0_AUDIENCE` unset.
+- In Auth0, the DODO Mobile app must list `dodomobile://auth` in both **Allowed Callback URLs** and **Allowed Logout URLs**.
+- Flow: Authorization Code + PKCE. Tokens are kept in the iOS Keychain (`expo-secure-store`) and refreshed automatically. Logout ends the Auth0 session only; it doesn't sign you out of Google.
+- To skip login during local testing, set `EXPO_PUBLIC_SKIP_LOGIN=1`. The app then opens straight to Home as Guest.
+- The "Dev Keys" banner on the login page is expected, because Google login uses Auth0's test keys.
+
 ## Run
 
 ```bash
@@ -47,3 +55,4 @@ npx tsc --noEmit && npm run lint && npm test
 - **Stuck on "Searching for development servers":** phone and Mac aren't on the same network, or Metro isn't running. Enter `http://<mac-lan-ip>:8081` manually.
 - **Narration or questions error out:** the ElevenLabs or Gemini key is missing from `.env.local`. Restart Metro with `-c` after adding it.
 - **Wake word missed:** pause briefly after "Hey DODO" before the command.
+- **Auth0 "Oops!, something went wrong":** check the Auth0 dashboard under Monitoring → Logs for the reason. The usual causes are a missing callback or logout URL, the wrong Client ID, or an audience that doesn't exist ("Service not found").

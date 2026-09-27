@@ -67,37 +67,43 @@ function isFresh(tokens: AuthTokens): boolean {
     return tokens.expiresAt !== null && tokens.expiresAt > Date.now() + TOKEN_EXPIRY_MARGIN_MS;
 }
 
+// iOS allows one auth browser at a time. One left behind (a hot reload during
+// login, a page the user never came back from) makes the next open throw
+// "Another web browser is already open", so close it first.
+function closeStaleBrowser() {
+    try {
+        WebBrowser.dismissAuthSession();
+    } catch {
+        // Nothing was open.
+    }
+}
+
+// Opens Auth0 in the browser and trades the returned code for tokens. Builds a
+// new request every time: each attempt needs its own state and PKCE pair, and
+// Auth0 rejects a login that reuses the previous one's (useAuthRequest builds
+// one per mount, which failed every other login).
+async function authorize(
+    redirectUri: string,
+    extraParams: Record<string, string>,
+): Promise<AuthTokens | null> {
+    const request = new AuthSession.AuthRequest({
+        clientId: AUTH0_CLIENT_ID,
+        redirectUri,
+        responseType: AuthSession.ResponseType.Code,
+        usePKCE: true,
+        scopes: SCOPES,
+        extraParams: { ...(AUTH0_AUDIENCE ? { audience: AUTH0_AUDIENCE } : {}), ...extraParams },
+    });
+    closeStaleBrowser();
+    const result = await request.promptAsync(discovery);
+    return exchangeAuthorizationCode(result, request, redirectUri);
+}
+
 export function useAuthFlow() {
     const [tokens, setTokens] = useState<AuthTokens | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [user, setUser] = useState<UserProfile | null>(null);
     const redirectUri = AuthSession.makeRedirectUri({ scheme: 'dodomobile', path: 'auth' });
-
-    const [loginRequest, loginResponse, promptLoginAsync] = AuthSession.useAuthRequest(
-        {
-            clientId: AUTH0_CLIENT_ID,
-            redirectUri,
-            responseType: AuthSession.ResponseType.Code,
-            usePKCE: true,
-            scopes: SCOPES,
-            extraParams: AUTH0_AUDIENCE ? { audience: AUTH0_AUDIENCE } : {},
-        },
-        discovery,
-    );
-    const [signUpRequest, signUpResponse, promptSignUpAsync] = AuthSession.useAuthRequest(
-        {
-            clientId: AUTH0_CLIENT_ID,
-            redirectUri,
-            responseType: AuthSession.ResponseType.Code,
-            usePKCE: true,
-            scopes: SCOPES,
-            extraParams: {
-                ...(AUTH0_AUDIENCE ? { audience: AUTH0_AUDIENCE } : {}),
-                screen_hint: 'signup',
-            },
-        },
-        discovery,
-    );
 
     useEffect(() => {
         let active = true;
@@ -130,44 +136,6 @@ export function useAuthFlow() {
             active = false;
         };
     }, []);
-
-    useEffect(() => {
-        if (loginResponse?.type !== 'success') return;
-        let active = true;
-        const persistLogin = async () => {
-            try {
-                const next = await exchangeAuthorizationCode(loginResponse, loginRequest, redirectUri);
-                if (!next) return;
-                await saveTokens(next);
-                if (active) setTokens(next);
-            } catch (error) {
-                console.warn('[dodo] Auth0 login failed:', String(error));
-            }
-        };
-        void persistLogin();
-        return () => {
-            active = false;
-        };
-    }, [loginRequest, loginResponse, redirectUri]);
-
-    useEffect(() => {
-        if (signUpResponse?.type !== 'success') return;
-        let active = true;
-        const persistSignUp = async () => {
-            try {
-                const next = await exchangeAuthorizationCode(signUpResponse, signUpRequest, redirectUri);
-                if (!next) return;
-                await saveTokens(next);
-                if (active) setTokens(next);
-            } catch (error) {
-                console.warn('[dodo] Auth0 sign-up failed:', String(error));
-            }
-        };
-        void persistSignUp();
-        return () => {
-            active = false;
-        };
-    }, [redirectUri, signUpRequest, signUpResponse]);
 
     const getValidAccessToken = useCallback(async () => {
         if (!tokens) return null;
@@ -215,13 +183,21 @@ export function useAuthFlow() {
         };
     }, [getValidAccessToken, tokens]);
 
-    const login = useCallback(async () => {
-        if (loginRequest) await promptLoginAsync();
-    }, [loginRequest, promptLoginAsync]);
-
-    const signUp = useCallback(async () => {
-        if (signUpRequest) await promptSignUpAsync();
-    }, [promptSignUpAsync, signUpRequest]);
+    const signIn = useCallback(
+        async (label: string, extraParams: Record<string, string>) => {
+            try {
+                const next = await authorize(redirectUri, extraParams);
+                if (!next) return;
+                await saveTokens(next);
+                setTokens(next);
+            } catch (error) {
+                console.warn(`[dodo] Auth0 ${label} failed:`, String(error));
+            }
+        },
+        [redirectUri],
+    );
+    const login = useCallback(() => signIn('login', {}), [signIn]);
+    const signUp = useCallback(() => signIn('sign-up', { screen_hint: 'signup' }), [signIn]);
 
     const logout = useCallback(async () => {
         await clearTokens();
@@ -231,7 +207,8 @@ export function useAuthFlow() {
 
         const logoutUrl =
             `https://${AUTH0_DOMAIN}/v2/logout?client_id=${encodeURIComponent(AUTH0_CLIENT_ID)}` +
-            `&returnTo=${encodeURIComponent(redirectUri)}&federated`;
+            `&returnTo=${encodeURIComponent(redirectUri)}`;
+        closeStaleBrowser();
         try {
             await WebBrowser.openAuthSessionAsync(logoutUrl, redirectUri);
         } catch (error) {

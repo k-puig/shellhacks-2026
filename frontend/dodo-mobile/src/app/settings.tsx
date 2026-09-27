@@ -107,7 +107,7 @@ export default function SettingsScreen() {
     await logout();
     // Close this sheet and swap out the tabs under it, so the reader (and its
     // narration and mic) shuts down instead of running behind Welcome.
-    router.dismissAll();
+    if (router.canDismiss()) router.dismissAll();
     router.replace('/welcome');
   };
 
