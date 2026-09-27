@@ -54,6 +54,14 @@ function setup(options: { bookExists?: boolean } = {}) {
     deleteBook: async () => {
       calls.push("deleteBook");
     },
+    fetchBook: async (input: { key: string }) => {
+      calls.push(`fetchBook:${input.key}`);
+      return {
+        body: new Blob(["epub"]).stream(),
+        contentLength: 4,
+        contentType: "application/epub+zip",
+      };
+    },
   } as unknown as S3Client;
   // Avoid constructors: neither a real EntityManager nor a real S3 client is needed.
   const service = Object.assign(Object.create(BookService.prototype), {
@@ -100,6 +108,28 @@ Deno.test("book fetch, update, and delete cannot access another owner's book", a
   assertEquals(calls, Array(3).fill(`findOwnedBook:${foreignBook}:${owner}`));
 });
 
+Deno.test("book file download rejects a foreign book before fetching S3", async () => {
+  const { service, calls } = setup();
+  await expectNotFound(
+    () => service.fetchBookObject({ id: foreignBook }, owner),
+    "Book not found",
+  );
+  assertEquals(calls, [`findOwnedBook:${foreignBook}:${owner}`]);
+});
+
+Deno.test("book file download fetches the owned book object", async () => {
+  const { service, calls, book } = setup({ bookExists: true });
+  const result = await service.fetchBookObject({ id: foreignBook }, owner);
+  assertEquals(await new Response(result.body).text(), "epub");
+  assertEquals(result.contentType, "application/epub+zip");
+  assertEquals(result.contentLength, 4);
+  assertEquals(result.filename, "Original.epub");
+  assertEquals(calls, [
+    `findOwnedBook:${foreignBook}:${owner}`,
+    `fetchBook:${book.s3Key}`,
+  ]);
+});
+
 Deno.test("book update rejects a foreign destination library without changing or flushing the book", async () => {
   const { service, calls, book } = setup({ bookExists: true });
   await expectNotFound(
@@ -125,6 +155,15 @@ Deno.test("book router forwards the authenticated principal to the service", asy
       calls.push(args);
       return { code: 200, message: "Book fetched", content: null };
     },
+    fetchBookObject: async (...args: unknown[]) => {
+      calls.push(args);
+      return {
+        body: new Blob(["epub"]).stream(),
+        contentLength: 4,
+        contentType: "application/epub+zip",
+        filename: "Original.epub",
+      };
+    },
   } as unknown as BookService;
   const app = new Hono<{ Variables: { authenticatedUserId: string } }>();
   app.use("*", async (c, next) => {
@@ -135,5 +174,23 @@ Deno.test("book router forwards the authenticated principal to the service", asy
 
   const response = await app.request(`http://localhost/book/${foreignBook}`);
   assertEquals(response.status, 200);
-  assertEquals(calls, [[{ id: foreignBook }, owner]]);
+
+  const fileResponse = await app.request(
+    `http://localhost/book/${foreignBook}/file`,
+  );
+  assertEquals(fileResponse.status, 200);
+  assertEquals(
+    fileResponse.headers.get("content-type"),
+    "application/epub+zip",
+  );
+  assertEquals(fileResponse.headers.get("content-length"), "4");
+  assertEquals(
+    fileResponse.headers.get("content-disposition"),
+    "inline; filename*=UTF-8''Original.epub",
+  );
+  assertEquals(await fileResponse.text(), "epub");
+  assertEquals(calls, [
+    [{ id: foreignBook }, owner],
+    [{ id: foreignBook }, owner],
+  ]);
 });

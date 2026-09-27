@@ -18,8 +18,12 @@ export function requireAuthenticatedUser(
     const resourcePath = /^\/api\/v1\/(library|book|highlight)(\/|$)/.test(
       path,
     );
+    const privateUserPath = /^\/api\/v1\/user\/[^/]+\/profile-picture\/?$/.test(
+      path,
+    );
     const safeMethod = ["GET", "HEAD", "OPTIONS"].includes(method);
-    const needsUser = !publicAuthPath && (resourcePath || !safeMethod);
+    const needsUser = !publicAuthPath &&
+      (resourcePath || privateUserPath || !safeMethod);
 
     if (!needsUser) {
       return next();

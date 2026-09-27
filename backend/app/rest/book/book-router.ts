@@ -90,7 +90,10 @@ export function createBookRouter(
     }
 
     try {
-      const bookObject = await bookService.fetchBookObject(parsed.data);
+      const bookObject = await bookService.fetchBookObject(
+        parsed.data,
+        c.get("authenticatedUserId"),
+      );
       const headers: Record<string, string> = {
         "Content-Type": bookObject.contentType,
         "Content-Disposition": `inline; filename*=UTF-8''${

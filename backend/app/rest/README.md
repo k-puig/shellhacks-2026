@@ -4,9 +4,10 @@ deno task start
 
 ## REST authentication and ownership
 
-The Auth0 browser session identifies the caller. Write routes (and library,
-book, and highlight reads) resolve its `sub` against `user.authId`;
-client-supplied user IDs, resource IDs, the `userinfo` cookie, and unverified
+The Auth0 browser session identifies the caller. Write routes, library/book/
+highlight reads (including book downloads), and profile-picture downloads
+resolve its `sub` against `user.authId`; profile pictures are self-only.
+Client-supplied user IDs, resource IDs, the `userinfo` cookie, and unverified
 bearer tokens are not credentials. Authentication failures return 401;
 inaccessible resources return 404. Browser writes from another origin are
 rejected.

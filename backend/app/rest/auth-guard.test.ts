@@ -40,6 +40,7 @@ Deno.test("unauthenticated writes and resource reads return 401 without a databa
       ["POST", "/api/v1/book"],
       ["PATCH", "/api/v1/user/update"],
       ["GET", "/api/v1/highlight/123"],
+      ["GET", `/api/v1/user/${userId}/profile-picture`],
     ]
   ) {
     const response = await app.request(`https://dodo.test${path}`, { method });
@@ -55,6 +56,16 @@ Deno.test("authenticated requests resolve sub, not IDs in the request", async ()
     {
       method: "DELETE",
     },
+  );
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), { userId });
+  assertEquals(lookups, ["auth0|owner"]);
+});
+
+Deno.test("profile picture reads resolve the authenticated account", async () => {
+  const { app, lookups } = setup("auth0|owner");
+  const response = await app.request(
+    `https://dodo.test/api/v1/user/${userId}/profile-picture`,
   );
   assertEquals(response.status, 200);
   assertEquals(await response.json(), { userId });

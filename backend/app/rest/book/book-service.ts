@@ -87,8 +87,9 @@ export class BookService {
 
   async fetchBookObject(
     req: FetchBookRequest,
+    userId: string,
   ): Promise<FetchBookObjectResult> {
-    const book = await this.bookRepository.findById(req.id);
+    const book = await this.bookRepository.findOwnedBook(req.id, userId);
 
     if (!book) {
       throw new BaseError(404, "Book not found");

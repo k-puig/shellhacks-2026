@@ -165,6 +165,11 @@ export function createUserRouter(
   });
 
   user.get("/:id/profile-picture", async (c) => {
+    const userId = c.get("authenticatedUserId");
+    if (!userId) {
+      return c.text("Unauthorized", 401);
+    }
+
     const parsedUserData = await fetchUserRequestZObject.safeParseAsync({
       id: c.req.param("id"),
     });
@@ -177,9 +182,17 @@ export function createUserRouter(
       }, 400);
     }
 
+    if (parsedUserData.data.id !== userId) {
+      return c.json(
+        { code: 404, message: "User not found", content: null },
+        404,
+      );
+    }
+
     try {
       const profilePicture = await userService.fetchProfilePicture(
         parsedUserData.data,
+        userId,
       );
       const headers: Record<string, string> = {
         "Content-Type": profilePicture.contentType,

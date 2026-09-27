@@ -76,8 +76,13 @@ export class UserService {
 
   async fetchProfilePicture(
     req: FetchUserRequest,
+    userId: string,
   ): Promise<FetchProfilePictureResult> {
-    const user = await this.userRepository.findById(req.id);
+    if (req.id !== userId) {
+      throw new BaseError(404, "User not found");
+    }
+
+    const user = await this.userRepository.findById(userId);
 
     if (!user) {
       throw new BaseError(404, "User not found");
