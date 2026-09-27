@@ -5,6 +5,11 @@ const CurrentUserInfo = z.object({
   username: z.string(),
   authId: z.string(),
 });
+const CurrentUserInfoResponse = z.object({
+  code: z.number(),
+  message: z.string(),
+  content: CurrentUserInfo,
+});
 export async function getCurrentUserInfo(): Promise<
   z.infer<typeof CurrentUserInfo>
 > {
@@ -15,10 +20,10 @@ export async function getCurrentUserInfo(): Promise<
   }
 
   const json = await res.json();
-  const userInfo = await CurrentUserInfo.safeParseAsync(json);
+  const response = await CurrentUserInfoResponse.safeParseAsync(json);
 
-  if (!userInfo.success) {
-    throw userInfo.error;
+  if (!response.success) {
+    throw response.error;
   }
-  return userInfo.data;
+  return response.data.content;
 }
