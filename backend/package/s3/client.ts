@@ -40,7 +40,8 @@ export class S3Client {
     await this.s3.putObject({
       Bucket: EPUB_S3_BUCKET,
       Key: obj.key,
-      Body: obj.book.stream(),
+      Body: new Uint8Array(await obj.book.arrayBuffer()),
+      ContentLength: obj.book.size,
       ContentType: obj.book.type || "application/epub+zip",
     });
 
@@ -75,7 +76,8 @@ export class S3Client {
     await this.s3.putObject({
       Bucket: PFP_S3_BUCKET,
       Key: obj.key,
-      Body: obj.profilePicture.stream(),
+      Body: new Uint8Array(await obj.profilePicture.arrayBuffer()),
+      ContentLength: obj.profilePicture.size,
       ContentType: obj.profilePicture.type || "application/octet-stream",
     });
 
