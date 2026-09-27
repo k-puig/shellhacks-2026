@@ -21,7 +21,8 @@ export const deleteUserRequestZObject = z.object({
 
 export const changeUserProfilePictureRequestZObject = z.object({
   id: z.uuidv4(),
-  newProfilePicture: z.string(), 
+  key: z.string(),
+  newProfilePicture: z.instanceof(File),
 });
 
 export type CreateUserRequest = z.infer<typeof createUserRequestZObj>;
