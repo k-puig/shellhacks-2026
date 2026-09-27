@@ -12,7 +12,7 @@
     "uuid": "npm:uuid@^14.0.2"
   },
   "tasks": {
-    "start": "deno run --allow-net --allow-env main.ts"
+    "start": "deno run --allow-net --allow-env --allow-sys main.ts"
   },
   "compilerOptions": {
     "jsx": "precompile",
