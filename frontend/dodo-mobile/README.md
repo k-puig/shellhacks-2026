@@ -51,7 +51,7 @@ On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, Air
 
 - Added books are saved **on the phone** as `books/<id>.json`, with their cover as `books/<id>-cover.jpg`.
 - Highlights, notes, asked questions and reading position are saved **on the phone** (`saved-items.json` and `reading-progress.json` in the app's storage), so they survive closing the app. They belong to the phone, not the account, until backend sync lands. Settings → Your data clears them.
-- `src/api/` holds the backend client. It sends the login token with each request and signs out if the backend rejects it. No screen uses it yet. Set `EXPO_PUBLIC_API_URL` when one does.
+- `src/api/` holds the backend client. On its first request (or whenever the backend answers 401) it logs into the backend with `POST /user/mobile-login`, which trades the Auth0 token for the backend's cookie, then retries. It signs out only if that also fails. No screen uses it yet. Set `EXPO_PUBLIC_API_URL` when one does. The backend's endpoints are listed in `backend/app/rest/README.md`.
 
 ## Voice commands
 

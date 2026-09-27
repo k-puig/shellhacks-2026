@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { AuthEnv } from "@app/rest/lib/auth/current-user.ts";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
   createBookRequestZObj,
@@ -7,82 +8,91 @@ import {
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import { BookService } from "@app/rest/book/book-service.ts";
 
-export function createBookRouter(bookService: BookService): Hono {
-  const book = new Hono();
+// Mounted behind requireUser (api.ts): c.var.user is the signed-in user, and
+// every route acts on that user's books only.
+export function createBookRouter(bookService: BookService): Hono<AuthEnv> {
+  const book = new Hono<AuthEnv>();
 
+  // Service errors (BaseError) become their status code, with the same body shape.
+  book.onError((error, c) => {
+    if (error instanceof BaseError) {
+      return c.json(
+        { code: error.code, message: error.message, content: null },
+        error.code,
+      );
+    }
+    console.error("Book route failed:", error);
+    return c.json(
+      { code: 500, message: "Something went wrong", content: null },
+      500,
+    );
+  });
+
+  const invalid = (message: string, issues: unknown) => ({
+    code: 400 as const,
+    message,
+    content: issues,
+  });
+
+  // Upload an .epub (multipart form: book, title, author, optional id and libraryId).
   book.post("/", async (c) => {
     const parsed = await createBookRequestZObj.safeParseAsync(
       await c.req.parseBody(),
     );
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book request",
-        content: parsed.error.issues,
-      });
+      return c.json(invalid("Invalid book request", parsed.error.issues), 400);
     }
 
-    const response = await bookService.createBook(parsed.data);
-    return c.json(response);
+    const response = await bookService.createBook(
+      parsed.data,
+      c.var.user.id,
+    );
+    return c.json(response, 201);
+  });
+
+  // My books, newest first (each with its s3Key).
+  book.get("/", async (c) => {
+    return c.json(await bookService.listBooks(c.var.user.id));
   });
 
   book.get("/:id", async (c) => {
     const parsed = await fetchBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book id",
-        content: parsed.error.issues,
-      });
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
 
-    try {
-      const response = await bookService.fetchBook(parsed.data);
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        });
-      }
+    return c.json(await bookService.fetchBook(parsed.data, c.var.user.id));
+  });
 
-      throw error;
+  // The book's .epub file, read from S3.
+  book.get("/:id/file", async (c) => {
+    const parsed = await fetchBookRequestZObj.safeParseAsync({
+      id: c.req.param("id"),
+    });
+    if (!parsed.success) {
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
+
+    const file = await bookService.fetchBookFile(parsed.data, c.var.user.id);
+    const headers: Record<string, string> = {
+      "Content-Type": "application/epub+zip",
+      "Content-Disposition": `attachment; filename="${parsed.data.id}.epub"`,
+    };
+    if (file.size !== undefined) headers["Content-Length"] = String(file.size);
+    return new Response(file.body, { headers });
   });
 
   book.delete("/:id", async (c) => {
     const parsed = await deleteBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book id",
-        content: parsed.error.issues,
-      });
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
 
-    try {
-      const response = await bookService.deleteBook(parsed.data);
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        });
-      }
-
-      throw error;
-    }
+    return c.json(await bookService.deleteBook(parsed.data, c.var.user.id));
   });
 
   return book;

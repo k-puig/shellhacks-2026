@@ -6,8 +6,9 @@ import { UserSchema } from "@package/database/schema/postgresql-schema/user-sche
 
 @Entity({ tableName: "book" })
 export class BookSchema extends BaseSchema {
-  @ManyToOne(() => LibrarySchema)
-  library!: Ref<LibrarySchema>;
+  // Libraries are optional folders for books.
+  @ManyToOne(() => LibrarySchema, { nullable: true })
+  library?: Ref<LibrarySchema>;
 
   @ManyToOne(() => UserSchema)
   user!: Ref<UserSchema>;

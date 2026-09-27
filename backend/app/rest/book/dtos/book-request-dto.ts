@@ -5,10 +5,11 @@ const optionalFormNumber = z.string()
   .transform((value) => Number(value))
   .optional();
 
+// Multipart form. The owner is the signed-in user (never sent by the client);
+// the phone sends its own id so the book keeps the same id on every device.
 export const createBookRequestZObj = z.object({
   id: z.uuidv4().optional(),
-  libraryId: z.uuidv4(),
-  userId: z.uuidv4(),
+  libraryId: z.uuidv4().optional(),
   title: z.string(),
   author: z.string(),
   lastAccessedAt: z.string().datetime().optional(),
@@ -28,8 +29,7 @@ export const fetchBookRequestZObj = z.object({
 
 export const updateBookRequestZObj = z.object({
   id: z.uuidv4(),
-  libraryId: z.uuidv4().optional(),
-  userId: z.uuidv4().optional(),
+  libraryId: z.uuidv4().nullable().optional(),
   title: z.string().optional(),
   author: z.string().optional(),
   lastAccessedAt: z.string().datetime().nullable().optional(),

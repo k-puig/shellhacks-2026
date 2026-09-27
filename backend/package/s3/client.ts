@@ -7,6 +7,7 @@ import {
 import type {
   DeleteBookInput,
   DeleteProfilePictureInput,
+  DownloadBookInput,
   UploadBookInput,
   UploadProfilePictureInput,
 } from "@package/s3/function-dtos.ts";
@@ -27,6 +28,22 @@ export class S3Client {
     });
 
     return obj.key;
+  }
+
+  // The stored .epub, streamed (the phone can't reach RustFS directly).
+  async downloadBook(
+    obj: DownloadBookInput,
+  ): Promise<{ body: ReadableStream<Uint8Array>; size?: number }> {
+    const res = await this.s3.getObject({
+      Bucket: EPUB_S3_BUCKET,
+      Key: obj.key,
+    });
+    if (!res.Body) throw new Error(`Book file ${obj.key} is empty`);
+
+    return {
+      body: res.Body.transformToWebStream() as ReadableStream<Uint8Array>,
+      size: res.ContentLength,
+    };
   }
 
   async deleteBook(obj: DeleteBookInput): Promise<void> {

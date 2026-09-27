@@ -7,6 +7,10 @@ export type DeleteBookInput = {
   key: string;
 };
 
+export type DownloadBookInput = {
+  key: string;
+};
+
 export type UploadProfilePictureInput = {
   key: string;
   profilePicture: File;
