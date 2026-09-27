@@ -45,7 +45,17 @@ export class NoteService {
         this.noteRepository = new NoteRepository(em);
     }
 
-    async createNote(req: CreateNoteRequest): Promise<CreateNoteBaseResponse> {
+    async createNote(req: CreateNoteRequest, userId: string): Promise<CreateNoteBaseResponse> {
+        if (!await this.noteRepository.ownsHighlight(req.highlightId, userId)) {
+            throw new BaseError(404, "Highlight not found");
+        }
+        // One note per highlight.
+        if (await this.noteRepository.hasNote(req.highlightId)) {
+            throw new BaseError(409, "This highlight already has a note");
+        }
+        if (req.id && await this.noteRepository.findById(req.id)) {
+            throw new BaseError(409, "A note with this id already exists");
+        }
         const note = await this.noteRepository.createNote(req);
 
         const highlightId = getHighlightId(note.highlight);
@@ -59,8 +69,8 @@ export class NoteService {
         });
     }
 
-    async fetchNote(req: FetchNoteRequest): Promise<FetchNoteBaseResponse> {
-        const note = await this.noteRepository.findById(req.id);
+    async fetchNote(req: FetchNoteRequest, userId: string): Promise<FetchNoteBaseResponse> {
+        const note = await this.noteRepository.findOwned(req.id, userId);
 
         if (!note) {
             throw new BaseError(404, "Note not found");
@@ -79,8 +89,9 @@ export class NoteService {
 
     async fetchNotesByBook(
         req: ChangeNoteByBookRequest,
+        userId: string,
     ): Promise<FetchNotesByBookBaseResponse> {
-        const notes = await this.noteRepository.findByBookId(req.bookId);
+        const notes = await this.noteRepository.findByBookId(req.bookId, userId);
 
         const content = notes.map((n) => {
             const highlightId = getHighlightId(n.highlight);
@@ -97,9 +108,8 @@ export class NoteService {
         return await createBaseResponse(200, "Notes fetched for book", content);
     }
 
-    async updateNote(req: UpdateNoteRequest): Promise<UpdateNoteBaseResponse> {
-        // NoteRepository has updateNoteText
-        const updated = await this.noteRepository.updateNoteText(req.id, req.text);
+    async updateNote(req: UpdateNoteRequest, userId: string): Promise<UpdateNoteBaseResponse> {
+        const updated = await this.noteRepository.updateNoteText(req.id, userId, req.text);
 
         if (!updated) {
             throw new BaseError(404, "Note not found");
@@ -116,7 +126,10 @@ export class NoteService {
         });
     }
 
-    async deleteNote(req: DeleteNoteRequest): Promise<DeleteNoteBaseResponse> {
+    async deleteNote(req: DeleteNoteRequest, userId: string): Promise<DeleteNoteBaseResponse> {
+        if (!await this.noteRepository.findOwned(req.id, userId)) {
+            throw new BaseError(404, "Note not found");
+        }
         const wasDeleted = await this.noteRepository.deleteById(req.id);
 
         if (!wasDeleted) {

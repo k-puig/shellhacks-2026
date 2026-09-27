@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import type { AuthEnv } from "@app/rest/lib/auth/current-user.ts";
-import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
+import { handleRouteError } from "@app/rest/lib/base-class/error-handler.ts";
 import {
   createBookRequestZObj,
   deleteBookRequestZObj,
   fetchBookRequestZObj,
+  updateBookProgressRequestZObj,
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import { BookService } from "@app/rest/book/book-service.ts";
 
@@ -13,20 +14,7 @@ import { BookService } from "@app/rest/book/book-service.ts";
 export function createBookRouter(bookService: BookService): Hono<AuthEnv> {
   const book = new Hono<AuthEnv>();
 
-  // Service errors (BaseError) become their status code, with the same body shape.
-  book.onError((error, c) => {
-    if (error instanceof BaseError) {
-      return c.json(
-        { code: error.code, message: error.message, content: null },
-        error.code,
-      );
-    }
-    console.error("Book route failed:", error);
-    return c.json(
-      { code: 500, message: "Something went wrong", content: null },
-      500,
-    );
-  });
+  book.onError(handleRouteError);
 
   const invalid = (message: string, issues: unknown) => ({
     code: 400 as const,
@@ -82,6 +70,19 @@ export function createBookRouter(bookService: BookService): Hono<AuthEnv> {
     };
     if (file.size !== undefined) headers["Content-Length"] = String(file.size);
     return new Response(file.body, { headers });
+  });
+
+  // Where the reader is: { "position": <word index> }.
+  book.patch("/:id/progress", async (c) => {
+    const parsed = await updateBookProgressRequestZObj.safeParseAsync({
+      ...await c.req.json().catch(() => ({})),
+      id: c.req.param("id"),
+    });
+    if (!parsed.success) {
+      return c.json(invalid("Invalid progress", parsed.error.issues), 400);
+    }
+
+    return c.json(await bookService.updateProgress(parsed.data, c.var.user.id));
   });
 
   book.delete("/:id", async (c) => {

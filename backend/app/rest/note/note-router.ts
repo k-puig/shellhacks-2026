@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { AuthEnv } from "@app/rest/lib/auth/current-user.ts";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
 import {
     changeNoteByBookRequestZobj,
@@ -9,8 +10,9 @@ import {
 } from "@app/rest/note/dtos/note-request-dto.ts";
 import { NoteService } from "@app/rest/note/note-service.ts";
 
-export function createNoteRouter(noteService: NoteService): Hono {
-    const note = new Hono();
+// Mounted behind requireUser (api.ts): only the signed-in user's notes.
+export function createNoteRouter(noteService: NoteService): Hono<AuthEnv> {
+    const note = new Hono<AuthEnv>();
 
   // POST /api/v1/note - Create a note for a highlight
     note.post("/", async (c) => {
@@ -28,7 +30,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
             400,
         );
         }
-        const response = await noteService.createNote(parsedBody.data);
+        const response = await noteService.createNote(parsedBody.data, c.var.user.id);
         return c.json(response, response.code);
     } 
     catch (error) {
@@ -59,7 +61,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
             );
         }
 
-        const response = await noteService.fetchNotesByBook(parsed.data);
+        const response = await noteService.fetchNotesByBook(parsed.data, c.var.user.id);
         return c.json(response, response.code);
         }   
         catch (error) {
@@ -90,7 +92,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
             );
         }
 
-        const response = await noteService.fetchNote(parsed.data);
+        const response = await noteService.fetchNote(parsed.data, c.var.user.id);
         return c.json(response, response.code);
         } 
         catch (error) {
@@ -122,7 +124,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
             );
         }
 
-        const response = await noteService.updateNote(parsed.data);
+        const response = await noteService.updateNote(parsed.data, c.var.user.id);
         return c.json(response, response.code);
         } 
         catch (error) {
@@ -153,7 +155,7 @@ export function createNoteRouter(noteService: NoteService): Hono {
             );
         }
 
-        const response = await noteService.deleteNote(parsed.data);
+        const response = await noteService.deleteNote(parsed.data, c.var.user.id);
         return c.json(response, response.code);
         } 
         catch (error) {

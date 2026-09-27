@@ -11,20 +11,25 @@ import type {
   CreateHighlightBaseResponse,
   DeleteHighlightBaseResponse,
   FetchHighlightBaseResponse,
+  ListHighlightsBaseResponse,
   UpdateHighlightBaseResponse,
 } from "@app/rest/highlight/dtos/highlight-response-dto.ts";
 import { HighlightRepository } from "@app/rest/highlight/highlight-repository.ts";
 import { HighlightSchema } from "@package/database/schema/postgresql-schema/index.ts";
 
+// start/end are bigint columns, which the database driver may return as
+// strings; the API always sends numbers.
 function toHighlightContent(highlight: HighlightSchema) {
   return {
     id: highlight.id,
     bookId: highlight.book.id,
-    start: highlight.start,
-    end: highlight.end,
+    start: Number(highlight.start),
+    end: Number(highlight.end),
   };
 }
 
+// Every method acts for the signed-in user (userId from requireUser). A
+// highlight on someone else's book is "not found".
 export class HighlightService {
   private readonly highlightRepository: HighlightRepository;
 
@@ -32,9 +37,32 @@ export class HighlightService {
     this.highlightRepository = new HighlightRepository(em);
   }
 
+  private async findOwned(id: string, userId: string): Promise<HighlightSchema> {
+    const highlight = await this.highlightRepository.findOwned(id, userId);
+    if (!highlight) {
+      throw new BaseError(404, "Highlight not found");
+    }
+    return highlight;
+  }
+
+  private async requireBook(bookId: string, userId: string): Promise<void> {
+    if (!await this.highlightRepository.ownsBook(bookId, userId)) {
+      throw new BaseError(404, "Book not found");
+    }
+  }
+
   async createHighlight(
     req: CreateHighlightRequest,
+    userId: string,
   ): Promise<CreateHighlightBaseResponse> {
+    await this.requireBook(req.bookId, userId);
+    if (req.end < req.start) {
+      throw new BaseError(400, "A highlight must end after it starts");
+    }
+    if (req.id && await this.highlightRepository.findById(req.id)) {
+      throw new BaseError(409, "A highlight with this id already exists");
+    }
+
     const highlight = await this.highlightRepository.createHighlight(req);
 
     return await createBaseResponse(
@@ -44,15 +72,27 @@ export class HighlightService {
     );
   }
 
+  async listHighlights(
+    bookId: string,
+    userId: string,
+  ): Promise<ListHighlightsBaseResponse> {
+    await this.requireBook(bookId, userId);
+    const highlights = await this.highlightRepository.findByBook(
+      bookId,
+      userId,
+    );
+    return await createBaseResponse(
+      200,
+      "Highlights fetched",
+      highlights.map(toHighlightContent),
+    );
+  }
+
   async fetchHighlight(
     req: FetchHighlightRequest,
+    userId: string,
   ): Promise<FetchHighlightBaseResponse> {
-    const highlight = await this.highlightRepository.findById(req.id);
-
-    if (!highlight) {
-      throw new BaseError(404, "Highlight not found");
-    }
-
+    const highlight = await this.findOwned(req.id, userId);
     return await createBaseResponse(
       200,
       "Highlight fetched",
@@ -62,21 +102,17 @@ export class HighlightService {
 
   async updateHighlight(
     req: UpdateHighlightRequest,
+    userId: string,
   ): Promise<UpdateHighlightBaseResponse> {
-    const highlight = await this.highlightRepository.findById(req.id);
-
-    if (!highlight) {
-      throw new BaseError(404, "Highlight not found");
-    }
+    const highlight = await this.findOwned(req.id, userId);
 
     if (req.bookId !== undefined) {
+      await this.requireBook(req.bookId, userId);
       highlight.book = this.highlightRepository.getBookReference(req.bookId);
     }
-
     if (req.start !== undefined) {
       highlight.start = req.start;
     }
-
     if (req.end !== undefined) {
       highlight.end = req.end;
     }
@@ -90,10 +126,13 @@ export class HighlightService {
     );
   }
 
+  // Also deletes the note attached to the highlight.
   async deleteHighlight(
     req: DeleteHighlightRequest,
+    userId: string,
   ): Promise<DeleteHighlightBaseResponse> {
-    const wasDeleted = await this.highlightRepository.deleteById(req.id);
+    await this.findOwned(req.id, userId);
+    const wasDeleted = await this.highlightRepository.deleteWithNote(req.id);
 
     if (!wasDeleted) {
       throw new BaseError(404, "Highlight not found");

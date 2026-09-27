@@ -36,6 +36,12 @@ export const updateBookRequestZObj = z.object({
   progress: z.number().int().nonnegative().nullable().optional(),
 });
 
+// PATCH /book/:id/progress: the word the reader is on.
+export const updateBookProgressRequestZObj = z.object({
+  id: z.uuidv4(),
+  position: z.number().int().nonnegative(),
+});
+
 export const deleteBookRequestZObj = z.object({
   id: z.uuidv4(),
 });
@@ -44,3 +50,6 @@ export type CreateBookRequest = z.infer<typeof createBookRequestZObj>;
 export type FetchBookRequest = z.infer<typeof fetchBookRequestZObj>;
 export type UpdateBookRequest = z.infer<typeof updateBookRequestZObj>;
 export type DeleteBookRequest = z.infer<typeof deleteBookRequestZObj>;
+export type UpdateBookProgressRequest = z.infer<
+  typeof updateBookProgressRequestZObj
+>;

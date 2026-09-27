@@ -1,6 +1,8 @@
 import * as z from "@zod/zod";
 
+// The phone sends its own id so the note keeps the same id on every device.
 export const createNoteRequestZObj = z.object({
+    id: z.uuidv4().optional(),
     highlightId: z.string().uuid(),
     text: z.string().min(1),
 });

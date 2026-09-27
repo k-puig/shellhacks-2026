@@ -5,6 +5,7 @@ import type {
   CreateBookRequest,
   DeleteBookRequest,
   FetchBookRequest,
+  UpdateBookProgressRequest,
   UpdateBookRequest,
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import type {
@@ -125,6 +126,21 @@ export class BookService {
     await this.bookRepository.flush();
 
     return await createBaseResponse(200, "Book updated", toBookContent(book));
+  }
+
+  // Saves where the reader is, and when they last read.
+  async updateProgress(
+    req: UpdateBookProgressRequest,
+    userId: string,
+  ): Promise<UpdateBookBaseResponse> {
+    return await this.updateBook(
+      {
+        id: req.id,
+        progress: req.position,
+        lastAccessedAt: new Date().toISOString(),
+      },
+      userId,
+    );
   }
 
   async deleteBook(

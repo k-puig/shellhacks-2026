@@ -25,7 +25,8 @@ export class BookSchema extends BaseSchema {
   @Property({ type: "date", nullable: true })
   lastAccessedAt?: Date;
 
-  // saved in seconds
+  // Where the reader is: the index of the word being read (words are numbered
+  // across the whole book, as the app splits it).
   @Property({ type: "bigint", nullable: true })
   progress?: bigint;
 }
