@@ -20,6 +20,9 @@ export const updateHighlightBaseResponseZObj = baseResponseZObj(
 export const deleteHighlightBaseResponseZObj = baseResponseZObj(
   z.object({ id: z.uuidv4() }),
 );
+export const listHighlightsBaseResponseZObj = baseResponseZObj(
+  z.array(highlightContentZObj),
+);
 
 export type CreateHighlightBaseResponse = z.infer<
   typeof createHighlightBaseResponseZObj
@@ -32,4 +35,7 @@ export type UpdateHighlightBaseResponse = z.infer<
 >;
 export type DeleteHighlightBaseResponse = z.infer<
   typeof deleteHighlightBaseResponseZObj
+>;
+export type ListHighlightsBaseResponse = z.infer<
+  typeof listHighlightsBaseResponseZObj
 >;

@@ -6,8 +6,9 @@ import { UserSchema } from "@package/database/schema/postgresql-schema/user-sche
 
 @Entity({ tableName: "book" })
 export class BookSchema extends BaseSchema {
-  @ManyToOne(() => LibrarySchema)
-  library!: Ref<LibrarySchema>;
+  // Libraries are optional folders for books.
+  @ManyToOne(() => LibrarySchema, { nullable: true })
+  library?: Ref<LibrarySchema>;
 
   @ManyToOne(() => UserSchema)
   user!: Ref<UserSchema>;
@@ -24,7 +25,8 @@ export class BookSchema extends BaseSchema {
   @Property({ type: "date", nullable: true })
   lastAccessedAt?: Date;
 
-  // saved in seconds
+  // Where the reader is: the index of the word being read (words are numbered
+  // across the whole book, as the app splits it).
   @Property({ type: "bigint", nullable: true })
   progress?: bigint;
 }

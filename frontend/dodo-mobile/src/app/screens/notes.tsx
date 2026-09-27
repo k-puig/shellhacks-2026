@@ -5,7 +5,7 @@ import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 import { BookCover } from '@/components/BookCover';
 import { useLibrary } from '@/data/libraryStore';
-import { mockBooks, type Book } from '@/data/mockBooks';
+import type { Book } from '@/data/mockBooks';
 import { groupQuestionsByBook, groupSavedByBook } from '@/data/savedByBook';
 import { colors } from '@/theme';
 
@@ -28,11 +28,11 @@ function BookHeader({ book, meta }: { book: Book; meta: string }) {
 }
 
 export default function NotesScreen() {
-  const { currentBookId, highlights, notes, askedQuestions, removeAskedQuestion } = useLibrary();
+  const { books, currentBookId, highlights, notes, askedQuestions, removeAskedQuestion } = useLibrary();
   // One section per book, the one being read first.
-  const groups = groupSavedByBook(mockBooks, highlights, notes, currentBookId);
+  const groups = groupSavedByBook(books, highlights, notes, currentBookId);
   const [tab, setTab] = useState<'saved' | 'ask'>('saved');
-  const questionGroups = groupQuestionsByBook(mockBooks, askedQuestions, currentBookId);
+  const questionGroups = groupQuestionsByBook(books, askedQuestions, currentBookId);
   const bookCount = tab === 'saved' ? groups.length : questionGroups.length;
 
   return (

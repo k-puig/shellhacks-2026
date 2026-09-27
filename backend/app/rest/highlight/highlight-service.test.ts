@@ -104,12 +104,25 @@ Deno.test("highlight update rejects moving to a foreign book before mutation or 
   ]);
 });
 
+Deno.test("highlight list checks book ownership before querying", async () => {
+  const { service, calls } = setup();
+  await expectNotFound(
+    () => service.listHighlights(foreignBook, owner),
+    "Book not found",
+  );
+  assertEquals(calls, [`hasOwnedBook:${foreignBook}:${owner}`]);
+});
+
 Deno.test("highlight router forwards the authenticated principal to the service", async () => {
   const calls: unknown[][] = [];
   const service = {
     createHighlight: async (...args: unknown[]) => {
       calls.push(args);
       return { code: 201, message: "Highlight created", content: null };
+    },
+    listHighlights: async (...args: unknown[]) => {
+      calls.push(args);
+      return { code: 200, message: "Highlights fetched", content: [] };
     },
   } as unknown as HighlightService;
   const app = new Hono<{ Variables: { authenticatedUserId: string } }>();
@@ -125,5 +138,12 @@ Deno.test("highlight router forwards the authenticated principal to the service"
     body: JSON.stringify({ bookId: foreignBook, start: 1, end: 5 }),
   });
   assertEquals(response.status, 200);
-  assertEquals(calls, [[{ bookId: foreignBook, start: 1, end: 5 }, owner]]);
+  const list = await app.request(
+    `http://localhost/highlight/book/${foreignBook}`,
+  );
+  assertEquals(list.status, 200);
+  assertEquals(calls, [
+    [{ bookId: foreignBook, start: 1, end: 5 }, owner],
+    [foreignBook, owner],
+  ]);
 });

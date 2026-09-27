@@ -21,7 +21,7 @@ To sign with your own Apple account, set `DODO_IOS_BUNDLE_ID` and `DODO_APPLE_TE
 
 ## Login (Auth0)
 
-- Uses the **DODO Mobile** Native application in the `dodocall` tenant, not the website's app, which requires a client secret. In `.env.local`, set `EXPO_PUBLIC_AUTH0_DOMAIN` and that app's `EXPO_PUBLIC_AUTH0_CLIENT_ID`, and leave `EXPO_PUBLIC_AUTH0_AUDIENCE` unset.
+- Use the **DODO Mobile** Native application in the `dodocall` tenant, not the website's confidential app. In `.env.local`, set `EXPO_PUBLIC_AUTH0_DOMAIN`, its `EXPO_PUBLIC_AUTH0_CLIENT_ID`, and `EXPO_PUBLIC_AUTH0_AUDIENCE` to the **Identifier** of the Auth0 API protected by the backend (not the mobile client ID or `/userinfo`). Configure the backend's audience to the same identifier and its Auth0 domain to the same tenant. Restart Metro with `-c` after changing these values. The API must allow the native application to request access tokens; an absent or incorrect audience will not yield a backend-verifiable API token.
 - In Auth0, the DODO Mobile app must list `dodomobile://auth` in both **Allowed Callback URLs** and **Allowed Logout URLs**.
 - Flow: Authorization Code + PKCE. Tokens are kept in the iOS Keychain (`expo-secure-store`) and refreshed automatically. Logout ends the Auth0 session only; it doesn't sign you out of Google.
 - To skip login during local testing, set `EXPO_PUBLIC_SKIP_LOGIN=1`. The app then opens straight to Home as Guest.
@@ -39,10 +39,21 @@ npx expo start --dev-client --lan -c
 
 Open DODO on the phone and choose your Mac's server from the dev launcher, or open the URL shown by Metro. Add `-c` whenever `.env.local` changes, because env values are bundled at start.
 
+## Adding books
+
+On Home, tap **＋ Add book** and pick an `.epub` (from Files, iCloud Drive, AirDrop…). The app converts it on the phone (`src/data/epub.ts`), with its cover, and it shows up first in the library, even offline. Free EPUBs to try: [Project Gutenberg](https://www.gutenberg.org) (for example `https://www.gutenberg.org/ebooks/11.epub3.images` opened in Safari on the iPhone).
+
+- Chapters come from the book's files in reading order. Contents, copyright, index and Project Gutenberg license pages are skipped, and so are code, tables and images, because they can't be read aloud.
+- When signed in and `EXPO_PUBLIC_API_URL` is set, the `.epub` is uploaded to the backend (stored in S3). The backend assigns a separate ID; the phone stores an account-scoped local-to-remote ID mapping. An upload failure is shown on Home; the book stays readable on the phone. To retry after coming back online, tap **Add book** and select the same EPUB again: the local copy is kept, and the fresh picked file is uploaded if this account has no mapping. Already-mapped books are not uploaded twice. Failed uploads are not queued automatically.
+- Reimporting a book already on this phone shows whether it was synced or is still offline. A full book you add hides the built-in sample of the same book.
+- PDFs aren't supported. Only EPUBs can be picked.
+
 ## Your data
 
-- Highlights, notes, asked questions and reading position are saved **on the phone** (`saved-items.json` and `reading-progress.json` in the app's storage), so they survive closing the app. They belong to the phone, not the account, until backend sync lands. Settings → Your data clears them.
-- `src/api/` holds the backend client. It sends the login token with each request and signs out if the backend rejects it. No screen uses it yet. Set `EXPO_PUBLIC_API_URL` when one does.
+- Home lists **Account books** from `GET /book` when online, and **On this phone** from locally converted EPUBs and samples. Account-only books are listed but cannot yet be downloaded/opened; add an EPUB on this phone to read it offline. A locally imported book is readable even if account listing or upload fails.
+- Added books are saved **on the phone** as `books/<local-id>.json`, with their cover as `books/<local-id>-cover.jpg`. Account IDs are tracked separately in `remote-book-ids.json`, per Auth0 subject.
+- Highlights, notes, asked questions and reading position are saved **on the phone** (`saved-items.json` and `reading-progress.json` in the app's storage), so they survive closing the app. For signed-in books with a saved remote ID, paragraph/pause word-index positions are also debounced to `PATCH /book/:id/progress` and flushed on reader exit; failed sync does not interrupt local reading. Progress for unmapped or guest books remains local. Highlights, notes and questions are not yet synced. Settings → Your data clears local saved items.
+- `src/api/` refuses backend requests when the API URL is configured but `EXPO_PUBLIC_AUTH0_AUDIENCE` is missing or blank, before obtaining or sending a token; local/guest reading still works. It sends an Auth0 API access token as a bearer on every backend request; no cookie exchange. On 401 it calls `POST /user/mobile-login` with that bearer for provisioning and retries once only if provisioning succeeds. A backend 401 does not sign out of Auth0; missing tokens do not make backend calls. Set `EXPO_PUBLIC_API_URL` to the backend origin (the client appends `/api/v1`). Local progress remains available offline; remote file download and remote progress restoration are not yet implemented.
 
 ## Voice commands
 

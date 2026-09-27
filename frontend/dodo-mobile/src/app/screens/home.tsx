@@ -1,12 +1,21 @@
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
+import { listBooks, type RemoteBook } from '@/api/books';
+import { useAuth } from '@/auth/AuthProvider';
+import { isApiConfigured } from '@/api/client';
+import { useApi } from '@/api/useApi';
 import { BookCover } from '@/components/BookCover';
+import { EpubError } from '@/data/epub';
 import { useLibrary } from '@/data/libraryStore';
-import { getBook, mockBooks, type Book } from '@/data/mockBooks';
+import type { Book } from '@/data/mockBooks';
+import { pickEpubBook } from '@/data/pickEpub';
+import { loadRemoteBookIds } from '@/data/remoteBookIds';
+import { syncImportedBook } from '@/data/syncImportedBook';
 import { bookProgress } from '@/data/readingProgress';
 import { colors } from '@/theme';
 
@@ -19,14 +28,80 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export default function HomeScreen() {
-  const { currentBookId, openBook, positions } = useLibrary();
+  const { books, getBook, addBook, currentBookId, openBook, positions } = useLibrary();
   // Real listening progress, from the furthest point reached in each book.
   const progressOf = (book: Book) => bookProgress(book, positions[book.id]?.furthestIdx ?? -1);
   const current = getBook(currentBookId);
+  const [adding, setAdding] = useState(false);
+  const api = useApi();
+  const { user } = useAuth();
+  const subject = user?.sub;
+  const [remoteBooks, setRemoteBooks] = useState<RemoteBook[]>([]);
+  const [remoteIds, setRemoteIds] = useState<Record<string, string>>({});
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setRemoteBooks([]);
+    setRemoteIds({});
+    setSyncMessage(null);
+    if (subject && isApiConfigured()) {
+      void loadRemoteBookIds(subject).then((ids) => {
+        if (active) setRemoteIds((current) => ({ ...ids, ...current }));
+      });
+      void listBooks(api).then(
+        (books) => { if (active) setRemoteBooks(books); },
+        (error) => { if (active) setSyncMessage(`Account books unavailable: ${String(error)}`); },
+      );
+    }
+    return () => { active = false; };
+  }, [api, subject]);
 
   const open = (book: Book) => {
     openBook(book.id);
     router.navigate('/screens/reader');
+  };
+
+  const addFromFiles = async () => {
+    setAdding(true);
+    try {
+      const picked = await pickEpubBook();
+      if (!picked) return;
+      const inLibrary = addBook(picked.book, picked.cover);
+      const alreadyLocal = inLibrary.id !== picked.book.id;
+      // The picked file is available now even if an earlier upload failed.
+      if (isApiConfigured() && subject) {
+        try {
+          const result = await syncImportedBook(api, subject, inLibrary, picked.fileUri);
+          if (result.status === 'uploaded') {
+            setRemoteIds((ids) => ({ ...ids, [inLibrary.id]: result.remote.id }));
+            setRemoteBooks((books) => [result.remote, ...books.filter((b) => b.id !== result.remote.id)]);
+          }
+          setSyncMessage(null);
+          if (alreadyLocal) {
+            Alert.alert('Already on this phone', result.status === 'uploaded'
+              ? `“${inLibrary.title}” is now synced to your account.`
+              : `“${inLibrary.title}” is already saved and synced.`);
+          }
+        } catch (error) {
+          setSyncMessage(`Saved on this phone, but not synced to your account: ${String(error)}. Reimport the EPUB to retry.`);
+          if (alreadyLocal) Alert.alert('Still on this phone', 'Account sync failed. Reimport the EPUB to retry.');
+        }
+      } else {
+        setSyncMessage(alreadyLocal
+          ? 'Already on this phone. Sign in and reimport the EPUB to sync.'
+          : 'Saved on this phone only. Sign in and reimport the EPUB to sync.');
+        if (alreadyLocal) Alert.alert('Already on this phone', `“${inLibrary.title}” is still available offline.`);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Couldn't add this book",
+        error instanceof EpubError ? error.message : 'Something went wrong reading the file. Try another EPUB.',
+      );
+      console.warn('[dodo] Could not add book:', String(error));
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -62,9 +137,39 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          <Text style={styles.sectionLabel}>Library</Text>
+          {isApiConfigured() && subject && (
+            <View style={styles.accountSection}>
+              <Text style={styles.sectionLabel}>Account books</Text>
+              {remoteBooks.map((book) => (
+                <Text key={book.id} style={styles.accountBook}>
+                  {book.title} · {book.author} — {Object.values(remoteIds).includes(book.id)
+                    ? 'offline copy on this phone'
+                    : 'on account (download not yet available)'}
+                </Text>
+              ))}
+              {!remoteBooks.length && <Text style={styles.author}>No account books loaded yet.</Text>}
+            </View>
+          )}
+          {syncMessage && <Text style={styles.syncMessage}>{syncMessage}</Text>}
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionLabel, styles.sectionLabelInRow]}>On this phone</Text>
+            <Pressable
+              style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+              onPress={addFromFiles}
+              disabled={adding}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Add a book from an EPUB file">
+              {adding ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <SymbolView name={{ ios: 'plus', android: 'add', web: 'add' }} tintColor={colors.accent} size={15} />
+              )}
+              <Text style={styles.addLabel}>{adding ? 'Adding…' : 'Add book'}</Text>
+            </Pressable>
+          </View>
           <View style={styles.grid}>
-            {mockBooks.map((book) => (
+            {books.map((book) => (
               <Pressable key={book.id} style={styles.gridItem} onPress={() => open(book)}>
                 <BookCover book={book} style={styles.cover} />
                 <Text style={styles.gridTitle} numberOfLines={2}>
@@ -101,6 +206,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
+  accountSection: { marginBottom: 24, gap: 8 },
+  accountBook: { color: colors.text, fontSize: 14 },
+  syncMessage: { color: colors.textSecondary, marginBottom: 16 },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionLabelInRow: { marginBottom: 0 },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addLabel: { color: colors.accent, fontSize: 15, fontWeight: '600' },
+  pressed: { opacity: 0.6 },
   hero: {
     flexDirection: 'row',
     gap: 16,

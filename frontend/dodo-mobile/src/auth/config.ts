@@ -8,4 +8,4 @@ export const AUTH0_DOMAIN = (process.env.EXPO_PUBLIC_AUTH0_DOMAIN ?? '')
 	.replace(/^https?:\/\//i, '')
 	.replace(/\/+$/, '');
 export const AUTH0_CLIENT_ID = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID ?? '';
-export const AUTH0_AUDIENCE = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE;
+export const AUTH0_AUDIENCE = (process.env.EXPO_PUBLIC_AUTH0_AUDIENCE ?? '').trim();

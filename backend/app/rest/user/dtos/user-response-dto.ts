@@ -12,6 +12,8 @@ export const createUserBaseResponseZObj = baseResponseZObj(
 export const fetchUserBaseResponseZObj = baseResponseZObj(
   z.object({
     id: z.uuidv4(),
+    username: z.string(),
+    authId: z.string(),
   }),
 );
 
@@ -30,7 +32,7 @@ export const deleteUserBaseResponseZObj = baseResponseZObj(
 export const changeUserProfilePictureBaseResponseZObj = baseResponseZObj(
   z.object({
     id: z.uuidv4(),
-    key: z.string()
+    key: z.string(),
   }),
 );
 

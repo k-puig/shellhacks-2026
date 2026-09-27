@@ -10,6 +10,7 @@ describe('parseProfile', () => {
         picture: 'https://example.com/me.png',
       }),
     ).toEqual({
+      sub: 'auth0|1',
       name: 'Michael Duran',
       email: 'michael@example.com',
       picture: 'https://example.com/me.png',
@@ -28,7 +29,7 @@ describe('parseProfile', () => {
   });
 
   it('leaves out what is missing', () => {
-    expect(parseProfile({})).toEqual({ name: 'Reader', email: undefined, picture: undefined });
+    expect(parseProfile({})).toEqual({ sub: undefined, name: 'Reader', email: undefined, picture: undefined });
   });
 });
 

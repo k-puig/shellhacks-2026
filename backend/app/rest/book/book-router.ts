@@ -1,9 +1,11 @@
 import { Hono } from "hono";
-import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
+import { handleRouteError } from "@app/rest/lib/base-class/error-handler.ts";
 import {
   createBookRequestZObj,
   deleteBookRequestZObj,
   fetchBookRequestZObj,
+  updateBookProgressRequestZObj,
+  updateBookRequestZObj,
 } from "@app/rest/book/dtos/book-request-dto.ts";
 import { BookService } from "@app/rest/book/book-service.ts";
 
@@ -11,144 +13,107 @@ export function createBookRouter(
   bookService: BookService,
 ): Hono<{ Variables: { authenticatedUserId: string } }> {
   const book = new Hono<{ Variables: { authenticatedUserId: string } }>();
+  book.onError(handleRouteError);
+
+  const invalid = (message: string, issues: unknown) => ({
+    code: 400 as const,
+    message,
+    content: issues,
+  });
 
   book.post("/", async (c) => {
     const parsed = await createBookRequestZObj.safeParseAsync(
       await c.req.parseBody(),
     );
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book request",
-        content: parsed.error.issues,
-      }, 400);
+      return c.json(invalid("Invalid book request", parsed.error.issues), 400);
     }
+    const response = await bookService.createBook(
+      parsed.data,
+      c.get("authenticatedUserId"),
+    );
+    return c.json(response, 201);
+  });
 
-    try {
-      const response = await bookService.createBook(
-        parsed.data,
-        c.get("authenticatedUserId"),
-      );
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        }, error.code);
-      }
-
-      throw error;
-    }
+  book.get("/", async (c) => {
+    return c.json(await bookService.listBooks(c.get("authenticatedUserId")));
   });
 
   book.get("/:id", async (c) => {
     const parsed = await fetchBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book id",
-        content: parsed.error.issues,
-      }, 400);
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
-
-    try {
-      const response = await bookService.fetchBook(
-        parsed.data,
-        c.get("authenticatedUserId"),
-      );
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        }, error.code);
-      }
-
-      throw error;
-    }
+    return c.json(
+      await bookService.fetchBook(parsed.data, c.get("authenticatedUserId")),
+    );
   });
 
   book.get("/:id/file", async (c) => {
     const parsed = await fetchBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book id",
-        content: parsed.error.issues,
-      });
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
+    const file = await bookService.fetchBookObject(
+      parsed.data,
+      c.get("authenticatedUserId"),
+    );
+    const headers: Record<string, string> = {
+      "Content-Type": file.contentType,
+      "Content-Disposition": `inline; filename*=UTF-8''${
+        encodeURIComponent(file.filename)
+      }`,
+    };
+    if (file.contentLength !== undefined) {
+      headers["Content-Length"] = String(file.contentLength);
+    }
+    return c.body(file.body, 200, headers);
+  });
 
-    try {
-      const bookObject = await bookService.fetchBookObject(
+  // Position is the word index in the book, not a page number.
+  book.patch("/:id/progress", async (c) => {
+    const parsed = await updateBookProgressRequestZObj.safeParseAsync({
+      ...await c.req.json().catch(() => ({})),
+      id: c.req.param("id"),
+    });
+    if (!parsed.success) {
+      return c.json(invalid("Invalid progress", parsed.error.issues), 400);
+    }
+    return c.json(
+      await bookService.updateProgress(
         parsed.data,
         c.get("authenticatedUserId"),
-      );
-      const headers: Record<string, string> = {
-        "Content-Type": bookObject.contentType,
-        "Content-Disposition": `inline; filename*=UTF-8''${
-          encodeURIComponent(bookObject.filename)
-        }`,
-      };
+      ),
+    );
+  });
 
-      if (bookObject.contentLength !== undefined) {
-        headers["Content-Length"] = String(bookObject.contentLength);
-      }
-
-      return c.body(bookObject.body, 200, headers);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        }, error.code);
-      }
-
-      throw error;
+  book.patch("/:id", async (c) => {
+    const parsed = await updateBookRequestZObj.safeParseAsync({
+      ...await c.req.json().catch(() => ({})),
+      id: c.req.param("id"),
+    });
+    if (!parsed.success) {
+      return c.json(invalid("Invalid book request", parsed.error.issues), 400);
     }
+    return c.json(
+      await bookService.updateBook(parsed.data, c.get("authenticatedUserId")),
+    );
   });
 
   book.delete("/:id", async (c) => {
     const parsed = await deleteBookRequestZObj.safeParseAsync({
       id: c.req.param("id"),
     });
-
     if (!parsed.success) {
-      return c.json({
-        code: 400,
-        message: "Invalid book id",
-        content: parsed.error.issues,
-      }, 400);
+      return c.json(invalid("Invalid book id", parsed.error.issues), 400);
     }
-
-    try {
-      const response = await bookService.deleteBook(
-        parsed.data,
-        c.get("authenticatedUserId"),
-      );
-      return c.json(response);
-    } catch (error) {
-      if (error instanceof BaseError) {
-        return c.json({
-          code: error.code,
-          message: error.message,
-          content: null,
-        }, error.code);
-      }
-
-      throw error;
-    }
+    return c.json(
+      await bookService.deleteBook(parsed.data, c.get("authenticatedUserId")),
+    );
   });
 
   return book;

@@ -20,7 +20,6 @@ export type FetchS3ObjectOutput = {
   contentLength?: number;
   contentType?: string;
 };
-
 export type UploadProfilePictureInput = {
   key: string;
   profilePicture: File;

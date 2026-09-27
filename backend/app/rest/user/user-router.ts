@@ -1,10 +1,5 @@
 import { Hono } from "hono";
-import {
-  deleteCookie,
-  getCookie,
-  getSignedCookie,
-  setSignedCookie,
-} from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { callback, logout, type OIDCEnv } from "@auth0/auth0-hono";
 import * as z from "@zod/zod";
 import { BaseError } from "@app/rest/lib/base-class/base-error.ts";
@@ -13,22 +8,17 @@ import {
   fetchUserRequestZObject,
   updateUserRequestZObject,
 } from "@app/rest/user/dtos/user-request-dto.ts";
-import { createUserBaseResponseZObj } from "@app/rest/user/dtos/user-response-dto.ts";
+
 import { UserService } from "@app/rest/user/user-service.ts";
 
 type UserEnv = OIDCEnv & {
-  Variables: { authenticatedUserId?: string };
+  Variables: { authenticatedUserId?: string; authenticatedSub?: string };
 };
 
 export function createUserRouter(
   userService: UserService,
 ): Hono<UserEnv> {
   const user = new Hono<UserEnv>();
-
-  const cookieSecret = Deno.env.get("COOKIE_SECRET");
-  if (!cookieSecret) {
-    throw new Error("No cookie secret given");
-  }
 
   // Remove every cookie sent to this backend before ending the Auth0 session.
   // All backend-issued cookies use the root path, which must match to expire them.
@@ -40,22 +30,21 @@ export function createUserRouter(
     return logout()(c, next);
   });
 
-  // Current signed in user info
   user.get("/", async (c) => {
-    const cookie = await getSignedCookie(
-      c,
-      cookieSecret,
-      "userinfo",
-    );
+    const userId = c.get("authenticatedUserId");
+    if (!userId) return c.text("Unauthorized", 401);
     try {
-      const obj = JSON.parse(cookie || "");
-      const userInfo = await createUserBaseResponseZObj.safeParseAsync(obj);
-      if (!userInfo.success) {
-        return c.text("could not parse cookie info", 401);
+      const response = await userService.fetchUser({ id: userId });
+      return c.json(response, response.code);
+    } catch (error) {
+      if (error instanceof BaseError) {
+        return c.json({
+          code: error.code,
+          message: error.message,
+          content: null,
+        }, error.code);
       }
-      return c.json(userInfo.data);
-    } catch {
-      return c.text("bad cookie data", 401);
+      throw error;
     }
   });
 
@@ -81,25 +70,32 @@ export function createUserRouter(
       return c.newResponse("unable to parse user name and/or sub", 400);
     }
 
-    const userInfo = await userService.createUserOrDoNothing({
+    await userService.createUserOrDoNothing({
       id: crypto.randomUUID(),
       username: parsedUserData.data.name,
       authId: parsedUserData.data.sub,
     });
 
-    await setSignedCookie(
-      c,
-      "userinfo",
-      JSON.stringify(userInfo),
-      cookieSecret,
-      {
-        path: "/",
-        secure: false,
-        httpOnly: true,
-      },
-    );
-
     return c.redirect("/", 302);
+  });
+
+  // A verified API bearer token may provision the matching account once.
+  user.post("/mobile-login", async (c) => {
+    const sub = c.get("authenticatedSub");
+    if (!sub) {
+      return c.json({
+        code: 401,
+        message: "Authentication required",
+        content: null,
+      }, 401);
+    }
+
+    const userInfo = await userService.createUserOrDoNothing({
+      id: crypto.randomUUID(),
+      username: "Reader",
+      authId: sub,
+    });
+    return c.json(userInfo, 200);
   });
 
   user.delete("/delete", async (c) => {

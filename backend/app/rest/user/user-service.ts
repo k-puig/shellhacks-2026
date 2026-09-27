@@ -53,6 +53,8 @@ export class UserService {
 
     return await createBaseResponse(200, "User fetched", {
       id: user.id,
+      username: user.username,
+      authId: user.authId,
     });
   }
 
