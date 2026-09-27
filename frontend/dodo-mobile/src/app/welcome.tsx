@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '@/auth/useAuth';
+import { useAuth } from '@/auth/AuthProvider';
 import { BrandMark, useIntroDone } from '@/components/BrandMark';
 import { colors } from '@/theme';
 

@@ -2,6 +2,13 @@
 
 export type UserProfile = { name: string; email?: string; picture?: string };
 
+export class UserInfoError extends Error {
+  constructor(public readonly status: number) {
+    super(`userinfo ${status}`);
+    this.name = 'UserInfoError';
+  }
+}
+
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
 // Auth0 sets `name` to the email address for email/password sign-ups, so a
@@ -30,6 +37,6 @@ export async function fetchProfile(domain: string, accessToken: string): Promise
   const res = await fetch(`https://${domain}/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`userinfo ${res.status}`);
+  if (!res.ok) throw new UserInfoError(res.status);
   return parseProfile(await res.json());
 }

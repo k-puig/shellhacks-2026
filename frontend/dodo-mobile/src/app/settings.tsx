@@ -7,7 +7,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 're
 
 import { SKIP_LOGIN } from '@/auth/config';
 import { initials } from '@/auth/profile';
-import { useAuth } from '@/auth/useAuth';
+import { useAuth } from '@/auth/AuthProvider';
 import { CommandsSheet } from '@/components/CommandsSheet';
 import { VoicePicker } from '@/components/VoicePicker';
 import { useLibrary } from '@/data/libraryStore';
