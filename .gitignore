@@ -9,3 +9,6 @@ backend/env
 
 # macOS folder metadata
 .DS_Store
+
+# Local tooling scratch (plans ledger, logs, renders)
+.superpowers/
