@@ -2,7 +2,7 @@
 .zed/
 *.env
 .env.local
-data/
+/data/
 
 # Backend secrets (Auth0, Postgres, storage keys): never commit
 backend/env
