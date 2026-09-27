@@ -14,10 +14,21 @@ export const fetchBookRequestZObj = z.object({
   id: z.uuidv4(),
 });
 
+export const updateBookRequestZObj = z.object({
+  id: z.uuidv4(),
+  libraryId: z.uuidv4().optional(),
+  userId: z.uuidv4().optional(),
+  title: z.string().optional(),
+  author: z.string().optional(),
+  lastAccessedAt: z.string().datetime().nullable().optional(),
+  progress: z.number().int().nonnegative().nullable().optional(),
+});
+
 export const deleteBookRequestZObj = z.object({
   id: z.uuidv4(),
 });
 
 export type CreateBookRequest = z.infer<typeof createBookRequestZObj>;
 export type FetchBookRequest = z.infer<typeof fetchBookRequestZObj>;
+export type UpdateBookRequest = z.infer<typeof updateBookRequestZObj>;
 export type DeleteBookRequest = z.infer<typeof deleteBookRequestZObj>;

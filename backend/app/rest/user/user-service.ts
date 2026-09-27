@@ -47,8 +47,17 @@ export class UserService {
   }
 
   async updateUser(req: UpdateUserRequest): Promise<UpdateUserBaseResponse> {
-    return await createBaseResponse(501, "Update user is not implemented", {
-      username: req.username,
+    const user = await this.userRepository.findById(req.id);
+
+    if (!user) {
+      throw new BaseError(404, "User not found");
+    }
+
+    user.username = req.username;
+    await this.userRepository.flush();
+
+    return await createBaseResponse(200, "User updated", {
+      username: user.username,
     });
   }
 

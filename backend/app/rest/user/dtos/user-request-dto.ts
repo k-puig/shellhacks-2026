@@ -11,7 +11,8 @@ export const fetchUserRequestZObject = z.object({
 });
 
 export const updateUserRequestZObject = z.object({
-  username: z.username(),
+  id: z.uuidv4(),
+  username: z.string(),
 });
 
 export const deleteUserRequestZObject = z.object({
@@ -20,7 +21,7 @@ export const deleteUserRequestZObject = z.object({
 
 export const changeUserProfilePictureRequestZObject = z.object({
   id: z.uuidv4(),
-  newProfilePicture: z.string(), //TODO: unknown what this datatype will be, im assuming string for image url
+  newProfilePicture: z.string(), 
 });
 
 export type CreateUserRequest = z.infer<typeof createUserRequestZObj>;

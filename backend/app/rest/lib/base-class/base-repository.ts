@@ -16,6 +16,7 @@ export abstract class BaseRepository<TEntity extends UuidEntity> {
   protected constructor(
     protected readonly em: EntityManager,
     protected readonly entity: EntityName<TEntity>,
+    private readonly idFilter: (id: string) => FilterQuery<TEntity>,
   ) {}
 
   async findOne(where: FilterQuery<TEntity>): Promise<TEntity | null> {
@@ -23,7 +24,7 @@ export abstract class BaseRepository<TEntity extends UuidEntity> {
   }
 
   async findById(id: TEntity["id"]): Promise<TEntity | null> {
-    return await this.findOne({ id });
+    return await this.findOne(this.idFilter(id));
   }
 
   async findMany(where: FilterQuery<TEntity>): Promise<TEntity[]> {
@@ -36,7 +37,7 @@ export abstract class BaseRepository<TEntity extends UuidEntity> {
 
   async create(data: RequiredEntityData<TEntity>): Promise<TEntity> {
     const entity = this.em.create(this.entity, data);
-    await this.em.persistAndFlush(entity);
+    await this.em.flush();
 
     return entity;
   }
@@ -51,30 +52,13 @@ export abstract class BaseRepository<TEntity extends UuidEntity> {
     return entity;
   }
 
-  async delete(where: FilterQuery<TEntity>): Promise<boolean | BaseError> {
+  async delete(where: FilterQuery<TEntity>): Promise<boolean> {
     const deletedCount = await this.em.nativeDelete(this.entity, where);
     return deletedCount > 0;
   }
 
   async deleteById(id: TEntity["id"]): Promise<boolean> {
-    try{
-      const doesUserExist = await this.em.findOne({ id });
-
-      if(doesUserExist === null){
-        throw new BaseError(404, "User was not found");
-      }
-
-      const wasUserDeleted = await this.deleted({ id })
-      
-      if(!wasUserDeleted){
-        throw new BaseError(500)
-      }
-
-      return true;
-    }catch(e){
-        return BaseError
-    }
-    
+    return await this.delete(this.idFilter(id));
   }
 
   async flush(): Promise<void> {

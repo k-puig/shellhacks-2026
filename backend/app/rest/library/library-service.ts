@@ -5,11 +5,13 @@ import type {
   CreateLibraryRequest,
   DeleteLibraryRequest,
   FetchLibraryRequest,
+  UpdateLibraryRequest,
 } from "@app/rest/library/dtos/library-request-dto.ts";
 import type {
   CreateLibraryBaseResponse,
   DeleteLibraryBaseResponse,
   FetchLibraryBaseResponse,
+  UpdateLibraryBaseResponse,
 } from "@app/rest/library/dtos/library-response-dto.ts";
 import { LibraryRepository } from "@app/rest/library/library-repository.ts";
 
@@ -41,6 +43,24 @@ export class LibraryService {
     }
 
     return await createBaseResponse(200, "Library fetched", {
+      id: library.id,
+      name: library.name,
+    });
+  }
+
+  async updateLibrary(
+    req: UpdateLibraryRequest,
+  ): Promise<UpdateLibraryBaseResponse> {
+    const library = await this.libraryRepository.findById(req.id);
+
+    if (!library) {
+      throw new BaseError(404, "Library not found");
+    }
+
+    library.name = req.name;
+    await this.libraryRepository.flush();
+
+    return await createBaseResponse(200, "Library updated", {
       id: library.id,
       name: library.name,
     });

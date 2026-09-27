@@ -13,10 +13,12 @@ export const bookContentZObj = z.object({
 
 export const createBookBaseResponseZObj = baseResponseZObj(bookContentZObj);
 export const fetchBookBaseResponseZObj = baseResponseZObj(bookContentZObj);
+export const updateBookBaseResponseZObj = baseResponseZObj(bookContentZObj);
 export const deleteBookBaseResponseZObj = baseResponseZObj(
   z.object({ id: z.uuidv4() }),
 );
 
 export type CreateBookBaseResponse = z.infer<typeof createBookBaseResponseZObj>;
 export type FetchBookBaseResponse = z.infer<typeof fetchBookBaseResponseZObj>;
+export type UpdateBookBaseResponse = z.infer<typeof updateBookBaseResponseZObj>;
 export type DeleteBookBaseResponse = z.infer<typeof deleteBookBaseResponseZObj>;

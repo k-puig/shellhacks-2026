@@ -17,7 +17,7 @@ export const fetchUserBaseResponseZObj = baseResponseZObj(
 
 export const updateUserBaseResponseZObj = baseResponseZObj(
   z.object({
-    username: z.username(),
+    username: z.string(),
   }),
 );
 

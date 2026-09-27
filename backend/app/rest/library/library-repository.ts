@@ -5,7 +5,7 @@ import type { CreateLibraryRequest } from "@app/rest/library/dtos/library-reques
 
 export class LibraryRepository extends BaseRepository<LibrarySchema> {
   constructor(em: EntityManager) {
-    super(em, LibrarySchema);
+    super(em, LibrarySchema, (id) => ({ id }));
   }
 
   async createLibrary(req: CreateLibraryRequest): Promise<LibrarySchema> {

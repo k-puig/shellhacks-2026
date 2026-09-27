@@ -8,12 +8,28 @@ export const highlightContentZObj = z.object({
   end: z.number(),
 });
 
-export const createHighlightBaseResponseZObj = baseResponseZObj(highlightContentZObj);
-export const fetchHighlightBaseResponseZObj = baseResponseZObj(highlightContentZObj);
+export const createHighlightBaseResponseZObj = baseResponseZObj(
+  highlightContentZObj,
+);
+export const fetchHighlightBaseResponseZObj = baseResponseZObj(
+  highlightContentZObj,
+);
+export const updateHighlightBaseResponseZObj = baseResponseZObj(
+  highlightContentZObj,
+);
 export const deleteHighlightBaseResponseZObj = baseResponseZObj(
   z.object({ id: z.uuidv4() }),
 );
 
-export type CreateHighlightBaseResponse = z.infer<typeof createHighlightBaseResponseZObj>;
-export type FetchHighlightBaseResponse = z.infer<typeof fetchHighlightBaseResponseZObj>;
-export type DeleteHighlightBaseResponse = z.infer<typeof deleteHighlightBaseResponseZObj>;
+export type CreateHighlightBaseResponse = z.infer<
+  typeof createHighlightBaseResponseZObj
+>;
+export type FetchHighlightBaseResponse = z.infer<
+  typeof fetchHighlightBaseResponseZObj
+>;
+export type UpdateHighlightBaseResponse = z.infer<
+  typeof updateHighlightBaseResponseZObj
+>;
+export type DeleteHighlightBaseResponse = z.infer<
+  typeof deleteHighlightBaseResponseZObj
+>;
