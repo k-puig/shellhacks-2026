@@ -1,4 +1,14 @@
 services:
+  epub-service:
+    build:
+      context: ./epub-service
+      dockerfile: Dockerfile
+    environment:
+      - KOKORO_VOICE=af_heart
+    tmpfs:
+      - /tmp:size=2g
+    # Only the backend needs to reach this service (http://epub-service:8001).
+
   dodo-rest:
     build:
       context: ./backend

@@ -25,12 +25,15 @@
               ++ [
                 deno
                 nodejs_26
+                ffmpeg-full
 
                 (python314.withPackages (
                   python-pkgs: with python-pkgs; [
                     fastapi
                     kokoro
                     ebooklib
+                    python-multipart
+                    uvicorn
                   ]
                 ))
 

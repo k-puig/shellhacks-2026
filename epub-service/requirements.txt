@@ -1,0 +1,7 @@
+fastapi>=0.115,<1
+python-multipart>=0.0.9,<1
+uvicorn>=0.30,<1
+ebooklib>=0.18,<1
+kokoro==0.9.4
+spacy>=3.8,<3.9  # Matches en_core_web_sm 3.8.0 required by Misaki.
+# NumPy is a direct dependency of Kokoro; used to pass PCM to ffmpeg.
